@@ -1,9 +1,9 @@
 ---
-- name: reload systemd
+- name: Reload systemd
   systemd:
-    daemon_reload: yes
+    daemon_reload: true
 
-- name: restart pcsd
+- name: Restart pcsd
   systemd:
     name: pcsd
     state: restarted

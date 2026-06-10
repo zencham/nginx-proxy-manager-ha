@@ -54,6 +54,7 @@ The DRBD block devices (`/dev/sdb1`, `/dev/sdb2`) must exist and be partitioned 
 | `app` | Mounts, docker-compose.yml, systemd unit |
 | `cluster` | Corosync/Pacemaker cluster setup |
 | `resources` | Pacemaker resources, constraints, timeouts |
+| `verify` | Post-deployment cluster/DRBD health checks (also runs with `resources`) |
 
 ```bash
 # Re-deploy compose config only
@@ -84,8 +85,32 @@ molecule test -s preflight
 | `drbd_device_app` | `/dev/drbd10` | DRBD virtual device for app |
 | `drbd_device_db` | `/dev/drbd11` | DRBD virtual device for db |
 | `npm_image_version` | `2.14.0` | NPM Docker image tag |
-| `mariadb_image_version` | `10.11` | MariaDB Docker image tag |
+| `mariadb_image_version` | `10.11.16` | MariaDB Docker image tag (pinned to the version running in production) |
+| `drbd_resync_rate` | `10M` | DRBD initial-sync rate limit |
 | `npm_admin_port` | `15625` | Host port for NPM admin UI |
 | `drbd_stop_timeout` | `90s` | Pacemaker DRBD stop timeout |
 | `npm_service_timeout` | `120s` | Pacemaker npm-stack start/stop timeout |
 | `timezone` | `Africa/Casablanca` | Container timezone |
+
+## Network Requirements
+
+No host firewall (`ufw`/`firewalld`/standalone `nftables` rules) is
+currently managed on either node — only Docker's own `iptables-nft` chains
+exist. If you add perimeter or host firewall rules, the cluster needs:
+
+| Purpose | Protocol/Port |
+|---|---|
+| Corosync cluster traffic | UDP 5404, 5405 |
+| pcsd (cluster auth/management) | TCP 2224 |
+| DRBD app replication | TCP 7790 (`drbd_port_app`) |
+| DRBD db replication | TCP 7791 (`drbd_port_db`) |
+| HTTP/HTTPS (NPM proxy) | TCP 80, 443 |
+| NPM admin UI | TCP 15625 (`npm_admin_port`) |
+
+## Future Considerations
+
+- **Docker CE migration**: both nodes currently run `docker.io` (the Debian
+  package). Upstream `docker-ce` receives security updates faster, but
+  swapping it in on already-deployed nodes requires a planned in-place
+  package replacement (conflicting packages, daemon restart) — out of scope
+  for this role pass.

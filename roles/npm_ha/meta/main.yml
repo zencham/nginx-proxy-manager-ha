@@ -2,6 +2,7 @@
 galaxy_info:
   author: HICHAM KARABANE
   description: 2-node HA Nginx Proxy Manager cluster — Pacemaker, Corosync, DRBD on Proxmox
+  license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Debian
