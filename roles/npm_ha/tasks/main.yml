@@ -1,0 +1,21 @@
+---
+- import_tasks: preflight.yml
+  tags: [preflight, always]
+
+- import_tasks: prepare.yml
+  tags: prepare
+
+- import_tasks: drbd.yml
+  tags: drbd
+
+- import_tasks: prepare_app.yml
+  tags: app
+
+- import_tasks: cluster.yml
+  tags: cluster
+
+- import_tasks: resources.yml
+  tags: resources
+
+- import_tasks: stonith.yml
+  tags: stonith
