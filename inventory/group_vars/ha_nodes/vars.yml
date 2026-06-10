@@ -1,0 +1,29 @@
+---
+# SSH connection
+ansible_user: root
+
+# Pacemaker cluster name
+cluster_name: npm_ha_cluster
+
+# Node topology
+node1_hostname: MIBTECH-NPM-PROD-01
+node1_ip:       192.168.206.33
+node2_hostname: MIBTECH-NPM-PROD-02
+node2_ip:       192.168.206.40
+
+# Virtual IP
+vip_address: 192.168.206.220
+vip_cidr:    "24"
+
+# DRBD underlying physical block devices
+# WARNING: verify with `lsblk` on each node before first run.
+# Wrong disk = data loss. No default is set intentionally.
+drbd_disk_app: /dev/sdb1
+drbd_disk_db:  /dev/sdb2
+
+# DRBD resource names (used by pcs and drbdadm — must be stable after first deploy)
+drbd_resource_app: mib_npm_ha_drbd_npm
+drbd_resource_db:  mib_npm_ha_drbd_db
+
+# Container timezone
+timezone: Africa/Casablanca
