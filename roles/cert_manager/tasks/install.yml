@@ -7,10 +7,8 @@
 - name: Download and install acme.sh
   shell: >
     curl -sSL https://get.acme.sh |
-    sh -s --
-    --install-online
+    sh -s "email={{ acme_email }}"
     --home {{ acme_sh_dir }}
-    --accountemail {{ acme_email }}
     --no-cron
   args:
     creates: "{{ acme_sh_dir }}/acme.sh"

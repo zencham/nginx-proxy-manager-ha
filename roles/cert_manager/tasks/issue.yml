@@ -2,8 +2,8 @@
 - name: "Set domain facts for {{ cert_domain }}"
   set_fact:
     _domain_base: "{{ cert_domain | regex_replace('^\\*\\.', '') }}"
-    _cert_fullchain: "{{ acme_sh_dir }}/{{ cert_domain }}/fullchain.cer"
-    _cert_key: "{{ acme_sh_dir }}/{{ cert_domain }}/{{ cert_domain }}.key"
+    _cert_fullchain: "{{ acme_sh_dir }}/{{ cert_domain }}_ecc/fullchain.cer"
+    _cert_key: "{{ acme_sh_dir }}/{{ cert_domain }}_ecc/{{ cert_domain }}.key"
 
 - name: "Check if cert already exists for {{ cert_domain }}"
   stat:

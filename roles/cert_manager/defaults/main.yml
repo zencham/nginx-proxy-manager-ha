@@ -1,4 +1,4 @@
 ---
-acme_sh_dir: "/root/.acme.sh"
+acme_sh_dir: "{{ lookup('env', 'HOME') }}/.acme.sh"
 acme_server: "letsencrypt"
 cert_renew_days: 30
