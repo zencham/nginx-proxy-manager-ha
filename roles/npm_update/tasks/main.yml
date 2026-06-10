@@ -1,0 +1,22 @@
+---
+- name: Pre-flight checks
+  import_tasks: preflight.yml
+
+- name: Detect active and passive nodes
+  import_tasks: detect_active.yml
+
+- name: "Update passive node {{ _npm_passive_node }}"
+  include_tasks: update_node.yml
+  vars:
+    target_node: "{{ _npm_passive_node }}"
+
+- name: Migrate npm_group to updated passive node
+  import_tasks: migrate.yml
+
+- name: "Update old active node {{ _npm_active_node }}"
+  include_tasks: update_node.yml
+  vars:
+    target_node: "{{ _npm_active_node }}"
+
+- name: Cleanup and verify
+  import_tasks: cleanup.yml

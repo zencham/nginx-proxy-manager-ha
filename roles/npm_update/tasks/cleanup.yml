@@ -1,0 +1,52 @@
+---
+- name: Clear forced location constraint from migration
+  command: pcs resource clear npm_group
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+  changed_when: true
+
+- name: Reset Pacemaker error counts
+  command: pcs resource cleanup npm_group
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+  changed_when: false
+
+- name: Wait for cluster to report no failed actions
+  command: pcs status --full
+  register: _cleanup_status
+  until: "'Failed Resource Actions' not in _cleanup_status.stdout"
+  retries: 12
+  delay: 10
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Wait for DRBD to finish syncing on both nodes
+  command: drbdadm status all
+  register: _drbd_final
+  until: >-
+    'Inconsistent' not in _drbd_final.stdout
+    and 'Diskless' not in _drbd_final.stdout
+  retries: "{{ npm_update_drbd_sync_retries }}"
+  delay: "{{ npm_update_drbd_sync_delay }}"
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Prune old Docker images on all nodes
+  command: docker image prune -f
+  changed_when: true
+  when: npm_update_prune | bool
+
+- name: Report final cluster state
+  command: pcs status resources
+  register: _final_pcs_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Show final cluster state
+  debug:
+    msg: "{{ _final_pcs_status.stdout }}"
+  run_once: true
+  delegate_to: "{{ node1_name }}"

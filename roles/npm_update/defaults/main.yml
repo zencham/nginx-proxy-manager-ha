@@ -1,0 +1,17 @@
+---
+# What to update — all false by default, caller enables what's needed.
+# At least one must be true or preflight will abort.
+npm_update_os: false
+npm_update_app: false
+npm_update_db: false
+npm_update_prune: true
+
+# Migration health check tuning
+npm_update_migrate_retries: 24    # × npm_update_migrate_delay = 4 min max
+npm_update_migrate_delay: 10
+npm_update_port_timeout: 120      # seconds to wait for VIP TCP port
+
+# Reboot + DRBD resync tuning
+npm_update_reboot_timeout: 300    # seconds to wait for SSH after reboot
+npm_update_drbd_sync_retries: 60  # × npm_update_drbd_sync_delay = 30 min max
+npm_update_drbd_sync_delay: 30

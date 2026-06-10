@@ -1,0 +1,36 @@
+---
+- name: Get npm_service resource status
+  command: pcs status resources
+  register: _pcs_resources_raw
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Broadcast active and passive node facts to all hosts
+  set_fact:
+    _npm_active_node: >-
+      {{ hostvars[node1_name]._pcs_resources_raw.stdout
+         | regex_search('npm_service.*Started\s+(\S+)', '\1')
+         | default([]) | first | default('') }}
+    _npm_passive_node: >-
+      {{ node2_name
+         if (hostvars[node1_name]._pcs_resources_raw.stdout
+             | regex_search('npm_service.*Started\s+(\S+)', '\1')
+             | default([]) | first | default('')) == node1_name
+         else node1_name }}
+
+- name: Assert active node is a known cluster member
+  assert:
+    that: _npm_active_node in [node1_name, node2_name]
+    fail_msg: >
+      Could not determine active node from pcs output.
+      Parsed: '{{ _npm_active_node }}'.
+      Full output: {{ hostvars[node1_name]._pcs_resources_raw.stdout }}
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Report active and passive nodes
+  debug:
+    msg: "Active node: {{ _npm_active_node }} | Passive node: {{ _npm_passive_node }}"
+  run_once: true
+  delegate_to: "{{ node1_name }}"

@@ -1,0 +1,78 @@
+---
+- name: Assert at least one update type is selected
+  assert:
+    that: npm_update_os | bool or npm_update_app | bool or npm_update_db | bool
+    fail_msg: >
+      Nothing to do. Set at least one of:
+      npm_update_os=true, npm_update_app=true, npm_update_db=true
+  run_once: true
+  delegate_to: localhost
+
+- name: Get cluster node status
+  command: pcs status nodes corosync
+  register: pcs_nodes_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Assert both nodes are online
+  assert:
+    that:
+      - node1_name in pcs_nodes_status.stdout
+      - node2_name in pcs_nodes_status.stdout
+    fail_msg: >
+      Not all cluster nodes are online.
+      Expected {{ node1_name }} and {{ node2_name }} in corosync output.
+      Got: {{ pcs_nodes_status.stdout }}
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Get full cluster status
+  command: pcs status --full
+  register: pcs_full_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Assert no failed resource actions
+  assert:
+    that: "'Failed Resource Actions' not in pcs_full_status.stdout"
+    fail_msg: >
+      Pacemaker reports failed resource actions. Resolve before updating.
+      Run `pcs resource cleanup` and check `pcs status --full`.
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Get resource status
+  command: pcs status resources
+  register: pcs_resources_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Assert npm_service is started
+  assert:
+    that: "'npm_service' in pcs_resources_status.stdout and 'Started' in pcs_resources_status.stdout"
+    fail_msg: >
+      npm_service is not in Started state. Check `pcs status resources`.
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Get DRBD status
+  command: drbdadm status all
+  register: drbd_preflight_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+
+- name: Assert DRBD is healthy
+  assert:
+    that:
+      - "'Inconsistent' not in drbd_preflight_status.stdout"
+      - "'Diskless' not in drbd_preflight_status.stdout"
+    fail_msg: >
+      DRBD is not healthy (Inconsistent or Diskless state detected).
+      Wait for DRBD to finish syncing before updating.
+      Run `drbdadm status all` to check.
+  run_once: true
+  delegate_to: "{{ node1_name }}"

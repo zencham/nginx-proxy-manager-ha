@@ -1,6 +1,6 @@
 ---
 # SSH connection
-ansible_user: root
+ansible_user: debian
 
 # Pacemaker cluster name
 pacemaker_cluster_name: npm_ha_cluster
@@ -24,6 +24,11 @@ drbd_backing_dev_db:  /dev/sdb2
 # DRBD resource names (used by pcs and drbdadm — must be stable after first deploy)
 drbd_resource_app: mib_npm_ha_drbd_app
 drbd_resource_db:  mib_npm_ha_drbd_db
+
+# Container image versions — authoritative source for both npm_ha and npm_update roles.
+# Bump these values here, then run npm_update.yml to apply.
+npm_image_version: "2.15.1"
+mariadb_image_version: "10.11.16"
 
 # Container timezone (sets TZ env var in MariaDB and NPM containers)
 container_timezone: Africa/Casablanca

@@ -1,0 +1,56 @@
+---
+- name: Move npm_group to passive node
+  command: pcs resource move npm_group {{ _npm_passive_node }}
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+  changed_when: true
+
+- name: Wait for npm_service to start on passive node
+  block:
+    - name: Poll until npm_service started on {{ _npm_passive_node }}
+      command: pcs status resources
+      register: _migrate_status
+      until: >-
+        'npm_service' in _migrate_status.stdout
+        and 'Started ' + _npm_passive_node in _migrate_status.stdout
+      retries: "{{ npm_update_migrate_retries }}"
+      delay: "{{ npm_update_migrate_delay }}"
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ node1_name }}"
+  rescue:
+    - name: Migration timeout — fail with recovery instructions
+      fail:
+        msg: >
+          Migration failed — npm_group did not start on {{ _npm_passive_node }}
+          within {{ npm_update_migrate_retries * npm_update_migrate_delay }}s.
+          RECOVERY: Run `pcs resource clear npm_group` then `pcs resource cleanup npm_group`.
+          Old active node {{ _npm_active_node }} is unmodified and still healthy.
+      run_once: true
+      delegate_to: "{{ node1_name }}"
+
+- name: Wait for NPM to accept connections on VIP
+  wait_for:
+    host: "{{ vip_address }}"
+    port: "{{ npm_admin_port }}"
+    timeout: "{{ npm_update_port_timeout }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Verify npm_app container is running the new image
+  command: !unsafe "docker inspect npm_app --format '{{.Config.Image}}'"
+  register: _npm_app_image
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ _npm_passive_node }}"
+  when: npm_update_app | bool
+
+- name: Assert npm_app image matches target version
+  assert:
+    that: npm_image_version in _npm_app_image.stdout
+    fail_msg: >
+      Container is running '{{ _npm_app_image.stdout }}' but expected
+      image tag to contain '{{ npm_image_version }}'.
+  run_once: true
+  delegate_to: "{{ node1_name }}"
+  when: npm_update_app | bool

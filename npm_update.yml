@@ -1,0 +1,7 @@
+---
+- name: Rolling update of MIBTECH HA NPM cluster
+  hosts: ha_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: npm_update

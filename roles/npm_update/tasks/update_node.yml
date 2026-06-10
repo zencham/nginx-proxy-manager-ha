@@ -1,0 +1,93 @@
+---
+# Called with: target_node=<hostname>
+# Node-specific tasks: when: inventory_hostname == target_node
+# Post-reboot cluster checks delegate to the OTHER node to avoid running on the rebooting host
+
+- name: "Re-template docker-compose.yml on {{ target_node }}"
+  template:
+    src: "{{ playbook_dir }}/roles/npm_ha/templates/docker-compose.yml.j2"
+    dest: "{{ npm_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - inventory_hostname == target_node
+    - npm_update_app | bool or npm_update_db | bool
+
+- name: "Pull NPM app image on {{ target_node }}"
+  command: docker compose -f {{ npm_compose_dir }}/docker-compose.yml pull app
+  when:
+    - inventory_hostname == target_node
+    - npm_update_app | bool
+  changed_when: true
+
+- name: "Pull MariaDB image on {{ target_node }}"
+  command: docker compose -f {{ npm_compose_dir }}/docker-compose.yml pull db
+  when:
+    - inventory_hostname == target_node
+    - npm_update_db | bool
+  changed_when: true
+
+- name: "Update apt cache on {{ target_node }}"
+  apt:
+    update_cache: true
+    cache_valid_time: 0
+  when:
+    - inventory_hostname == target_node
+    - npm_update_os | bool
+
+- name: "Upgrade packages on {{ target_node }}"
+  apt:
+    upgrade: safe
+  register: _apt_upgrade_result
+  when:
+    - inventory_hostname == target_node
+    - npm_update_os | bool
+
+- name: "Check if reboot is required on {{ target_node }}"
+  stat:
+    path: /var/run/reboot-required
+  register: _reboot_required
+  when:
+    - inventory_hostname == target_node
+    - npm_update_os | bool
+
+- name: "Reboot {{ target_node }} (kernel or libc updated)"
+  reboot:
+    reboot_timeout: "{{ npm_update_reboot_timeout }}"
+  when:
+    - inventory_hostname == target_node
+    - npm_update_os | bool
+    - _reboot_required.stat is defined
+    - _reboot_required.stat.exists
+
+# Uses hostvars[target_node] because run_once evaluates the condition on the first play host,
+# which may not be target_node — and _reboot_required is only registered on target_node.
+- name: "Wait for {{ target_node }} to rejoin Pacemaker after reboot"
+  command: pcs status nodes corosync
+  register: _corosync_post_reboot
+  until: target_node in _corosync_post_reboot.stdout
+  retries: 30
+  delay: 10
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node2_name if target_node == node1_name else node1_name }}"
+  when:
+    - npm_update_os | bool
+    - hostvars[target_node]._reboot_required.stat is defined
+    - hostvars[target_node]._reboot_required.stat.exists
+
+- name: "Wait for DRBD to finish syncing on {{ target_node }} after reboot"
+  command: drbdadm status all
+  register: _drbd_post_reboot
+  until: >-
+    'Inconsistent' not in _drbd_post_reboot.stdout
+    and 'Diskless' not in _drbd_post_reboot.stdout
+  retries: "{{ npm_update_drbd_sync_retries }}"
+  delay: "{{ npm_update_drbd_sync_delay }}"
+  changed_when: false
+  when:
+    - inventory_hostname == target_node
+    - npm_update_os | bool
+    - _reboot_required.stat is defined
+    - _reboot_required.stat.exists
