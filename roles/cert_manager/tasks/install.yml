@@ -1,1 +1,22 @@
 ---
+- name: Check if acme.sh is already installed
+  stat:
+    path: "{{ acme_sh_dir }}/acme.sh"
+  register: acme_sh_stat
+
+- name: Download and install acme.sh
+  shell: >
+    curl -sSL https://get.acme.sh |
+    sh -s --
+    --install-online
+    --home {{ acme_sh_dir }}
+    --accountemail {{ acme_email }}
+    --no-cron
+  args:
+    creates: "{{ acme_sh_dir }}/acme.sh"
+  when: not acme_sh_stat.stat.exists
+
+- name: Set default ACME CA
+  command: "{{ acme_sh_dir }}/acme.sh --set-default-ca --server {{ acme_server }}"
+  when: not acme_sh_stat.stat.exists
+  changed_when: true
