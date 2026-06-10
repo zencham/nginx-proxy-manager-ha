@@ -144,6 +144,59 @@ exist. If you add perimeter or host firewall rules, the cluster needs:
 | HTTP/HTTPS (NPM proxy) | TCP 80, 443 |
 | NPM admin UI | TCP 15625 (`npm_admin_port`) |
 
+## Certificate Management (cert_manager)
+
+Wildcard TLS certificates are issued on the controller via [acme.sh](https://github.com/acmesh-official/acme.sh) + Cloudflare DNS-01 and pushed to NPM nodes via the NPM HTTP API. NPM nodes have no outbound internet access — all ACME traffic originates from the controller.
+
+### Prerequisites
+
+- Cloudflare API token per domain (DNS:Edit permission on that specific zone)
+- NPM admin UI password
+
+### Setup
+
+1. Copy and populate the controller vault:
+
+```bash
+cp inventory/group_vars/controller/vault.yml.example /tmp/ctrl_vault.yml
+# Edit /tmp/ctrl_vault.yml: fill in each cloudflare_tokens entry and npm_admin_password
+ansible-vault decrypt inventory/group_vars/controller/vault.yml
+cp /tmp/ctrl_vault.yml inventory/group_vars/controller/vault.yml
+ansible-vault encrypt inventory/group_vars/controller/vault.yml --encrypt-vault-id default
+rm /tmp/ctrl_vault.yml
+```
+
+2. Edit `inventory/group_vars/controller/vars.yml` with your domain list, NPM API URL, and ACME email.
+
+### Running
+
+```bash
+ansible-playbook cert_manager.yml
+```
+
+- **First run per domain**: issues a new wildcard + apex cert from Let's Encrypt via Cloudflare DNS-01.
+- **Subsequent runs**: renews only if the cert expires within `cert_renew_days` (default 30 days). No-op if still valid.
+
+### Automating (optional)
+
+Add a weekly cron on the controller:
+
+```
+0 3 * * 1 cd /path/to/ansible && ansible-playbook cert_manager.yml
+```
+
+No role changes needed — the `--days` threshold already makes runs idempotent.
+
+### Staging / testing
+
+To avoid Let's Encrypt rate limits while testing, set in `inventory/group_vars/controller/vars.yml`:
+
+```yaml
+acme_server: "letsencrypt_test"
+```
+
+Issue against staging, verify the cert upload flow, then switch back to `letsencrypt` and re-run to issue the production cert.
+
 ## Future Considerations
 
 - **Docker CE migration**: both nodes currently run `docker.io` (the Debian
