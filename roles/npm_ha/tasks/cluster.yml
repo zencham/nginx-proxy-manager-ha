@@ -15,9 +15,14 @@
   command: >
     pcs host auth {{ node1_hostname }} {{ node2_hostname }}
     -u hacluster -p {{ hacluster_password }}
+  register: pcs_host_auth
+  until: pcs_host_auth.rc == 0
+  retries: 3
+  delay: 5
   run_once: true
   delegate_to: "{{ node1_hostname }}"
   when: corosync_conf.rc != 0
+  no_log: true
 
 - name: Setup the cluster
   command: >
@@ -38,9 +43,17 @@
   delegate_to: "{{ node1_hostname }}"
   when: corosync_conf.rc != 0
 
-- name: Wait for cluster to stabilise
-  pause:
-    seconds: "{{ cluster_settle_wait }}"
+- name: Wait for both cluster nodes to be online
+  command: pcs status nodes corosync
+  register: corosync_nodes
+  until: >-
+    (node1_hostname + ' ' + node2_hostname) in corosync_nodes.stdout
+    or (node2_hostname + ' ' + node1_hostname) in corosync_nodes.stdout
+  retries: 24
+  delay: 5
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
   when: corosync_conf.rc != 0
 
 - name: Set global cluster properties
