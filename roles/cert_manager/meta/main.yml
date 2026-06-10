@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: MIBTECH
+  description: Wildcard cert lifecycle via acme.sh + Cloudflare DNS-01 to NPM API
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []
