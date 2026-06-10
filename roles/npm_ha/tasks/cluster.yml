@@ -1,0 +1,53 @@
+---
+- name: Check if our cluster is already configured
+  command: grep -q "{{ cluster_name }}" /etc/corosync/corosync.conf
+  register: corosync_conf
+  ignore_errors: true
+  changed_when: false
+
+- name: Remove dummy Debian corosync config if present
+  file:
+    path: /etc/corosync/corosync.conf
+    state: absent
+  when: corosync_conf.rc != 0
+
+- name: Authenticate cluster nodes
+  command: >
+    pcs host auth {{ node1_hostname }} {{ node2_hostname }}
+    -u hacluster -p {{ hacluster_password }}
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: corosync_conf.rc != 0
+
+- name: Setup the cluster
+  command: >
+    pcs cluster setup {{ cluster_name }}
+    {{ node1_hostname }} addr={{ node1_ip }}
+    {{ node2_hostname }} addr={{ node2_ip }}
+    --force
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: corosync_conf.rc != 0
+
+- name: Start and enable cluster services
+  command: "{{ item }}"
+  loop:
+    - pcs cluster start --all
+    - pcs cluster enable --all
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: corosync_conf.rc != 0
+
+- name: Wait for cluster to stabilise
+  pause:
+    seconds: "{{ cluster_settle_wait }}"
+  when: corosync_conf.rc != 0
+
+- name: Set global cluster properties
+  command: "{{ item }}"
+  loop:
+    - pcs property set stonith-enabled=false
+    - pcs property set no-quorum-policy=ignore
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: corosync_conf.rc != 0
