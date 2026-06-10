@@ -18,5 +18,4 @@
 
 - name: Set default ACME CA
   command: "{{ acme_sh_dir }}/acme.sh --set-default-ca --server {{ acme_server }}"
-  when: not acme_sh_stat.stat.exists
   changed_when: true

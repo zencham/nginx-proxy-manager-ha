@@ -23,6 +23,7 @@
   when: not cert_file_stat.stat.exists
   register: acme_issue
   changed_when: acme_issue.rc == 0
+  no_log: true
 
 - name: "Renew cert for {{ cert_domain }} (subsequent runs)"
   shell: >
@@ -36,6 +37,7 @@
   register: acme_renew
   failed_when: acme_renew.rc not in [0, 2]
   changed_when: acme_renew.rc == 0
+  no_log: true
 
 - name: "Set cert_renewed fact for {{ cert_domain }}"
   set_fact:

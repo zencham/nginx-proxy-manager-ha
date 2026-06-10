@@ -158,12 +158,9 @@ Wildcard TLS certificates are issued on the controller via [acme.sh](https://git
 1. Copy and populate the controller vault:
 
 ```bash
-cp inventory/group_vars/controller/vault.yml.example /tmp/ctrl_vault.yml
-# Edit /tmp/ctrl_vault.yml: fill in each cloudflare_tokens entry and npm_admin_password
-ansible-vault decrypt inventory/group_vars/controller/vault.yml
-cp /tmp/ctrl_vault.yml inventory/group_vars/controller/vault.yml
+cp inventory/group_vars/controller/vault.yml.example inventory/group_vars/controller/vault.yml
+# Edit inventory/group_vars/controller/vault.yml: fill in each cloudflare_tokens entry and npm_admin_password
 ansible-vault encrypt inventory/group_vars/controller/vault.yml --encrypt-vault-id default
-rm /tmp/ctrl_vault.yml
 ```
 
 2. Edit `inventory/group_vars/controller/vars.yml` with your domain list, NPM API URL, and ACME email.

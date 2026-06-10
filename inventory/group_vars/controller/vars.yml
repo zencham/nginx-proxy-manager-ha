@@ -7,5 +7,3 @@ cert_domains:
   - "*.mibtech.ma"
   - "*.visionhis.ma"
   - "*.myakdital.ma"
-
-cert_renew_days: 30

@@ -2,5 +2,6 @@
 - name: Manage wildcard TLS certificates
   hosts: controller
   gather_facts: false
+  become: true
   roles:
     - role: cert_manager

@@ -22,3 +22,11 @@ skip_list:
   # `pcs status ... | grep <resource>` is the documented pattern for polling
   # cluster/resource state.
   - risky-shell-pipe
+  # acme.sh's installer is a remote shell script piped through `sh`; no
+  # Ansible module exists for this, and acme.sh provides no other supported
+  # install method.
+  - command-instead-of-module
+  # cert_manager task names are templated with {{ cert_domain }} so each
+  # loop iteration is identifiable in playbook output — intentional, not
+  # an oversight.
+  - name[template]

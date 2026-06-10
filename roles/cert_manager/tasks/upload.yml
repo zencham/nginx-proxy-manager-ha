@@ -25,6 +25,7 @@
       Authorization: "Bearer {{ npm_token }}"
     status_code: 200
   register: npm_certs_list
+  no_log: true
 
 - name: "Find existing cert entry for {{ cert_domain }}"
   set_fact:
@@ -46,6 +47,7 @@
     status_code: [200, 201]
   register: npm_cert_create
   when: "'id' not in _existing_cert"
+  no_log: true
 
 - name: "Set cert ID fact for {{ cert_domain }}"
   set_fact:
