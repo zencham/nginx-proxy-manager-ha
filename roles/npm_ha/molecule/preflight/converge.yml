@@ -1,7 +1,7 @@
 ---
 - name: Converge — expect preflight failure on missing disks
   hosts: ha_nodes
-  become: yes
+  become: true
   tasks:
     - block:
         - include_role:
