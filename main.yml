@@ -2,5 +2,6 @@
 - name: Deploy HA Cluster for NPM (Pacemaker, Corosync, DRBD)
   hosts: ha_nodes
   become: true
+  any_errors_fatal: true
   roles:
     - role: npm_ha

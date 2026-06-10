@@ -123,7 +123,7 @@ devices, DRBD resource names, timezone) lives in `inventory/group_vars/ha_nodes/
 | `npm_compose_dir` | `/opt/npm/compose` | Docker Compose file directory |
 | `npm_mount_app` | `/mnt/npm_app` | Mount point for app DRBD device |
 | `npm_mount_db` | `/mnt/npm_db` | Mount point for db DRBD device |
-| `npm_image_version` | `2.14.0` | NPM Docker image tag |
+| `npm_image_version` | `2.15.1` | NPM Docker image tag (bump in `group_vars/ha_nodes/vars.yml`, then run `npm_update.yml`) |
 | `mariadb_image_version` | `10.11.16` | MariaDB Docker image tag |
 | `npm_admin_port` | `15625` | Host port for NPM admin UI |
 | `drbd_stop_timeout` | `90s` | Pacemaker DRBD stop timeout |

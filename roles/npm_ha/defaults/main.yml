@@ -27,4 +27,4 @@ npm_admin_port: 15625
 
 # Pacemaker resource timeouts
 drbd_stop_timeout: 90s
-npm_service_timeout: 120s
+npm_service_timeout: 300s

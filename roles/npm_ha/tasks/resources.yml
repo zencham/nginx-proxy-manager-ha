@@ -93,7 +93,7 @@
       op stop timeout={{ npm_service_timeout }}
   run_once: true
   delegate_to: "{{ node1_name }}"
-  when: group_check.rc != 0
+  changed_when: true
 
 - name: Wait for npm_group resources to start
   shell: pcs status resources | grep npm_service
