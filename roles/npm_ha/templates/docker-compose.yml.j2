@@ -16,7 +16,7 @@ services:
       MARIADB_DATABASE: "npm_edge"
       MARIADB_USER: "npm_adm"
       MARIADB_PASSWORD: "{{ mariadb_npm_password }}"
-      TZ: "{{ timezone }}"
+      TZ: "{{ container_timezone }}"
     volumes:
       - "{{ npm_mount_db }}/db/mysql:/var/lib/mysql"
     networks:
@@ -41,7 +41,7 @@ services:
       DB_MYSQL_USER: "npm_adm"
       DB_MYSQL_PASSWORD: "{{ mariadb_npm_password }}"
       DB_MYSQL_NAME: "npm_edge"
-      TZ: "{{ timezone }}"
+      TZ: "{{ container_timezone }}"
     volumes:
       - "{{ npm_mount_app }}/data:/data"
       - "{{ npm_mount_app }}/letsencrypt:/etc/letsencrypt"

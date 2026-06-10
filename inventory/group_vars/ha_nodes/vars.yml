@@ -3,7 +3,7 @@
 ansible_user: root
 
 # Pacemaker cluster name
-cluster_name: npm_ha_cluster
+pacemaker_cluster_name: npm_ha_cluster
 
 # Node topology
 node1_hostname: MIBTECH-NPM-PROD-01
@@ -25,5 +25,5 @@ drbd_disk_db:  /dev/sdb2
 drbd_resource_app: mib_npm_ha_drbd_npm
 drbd_resource_db:  mib_npm_ha_drbd_db
 
-# Container timezone
-timezone: Africa/Casablanca
+# Container timezone (sets TZ env var in MariaDB and NPM containers)
+container_timezone: Africa/Casablanca

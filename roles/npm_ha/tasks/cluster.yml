@@ -1,6 +1,6 @@
 ---
 - name: Check if our cluster is already configured
-  command: grep -q "{{ cluster_name }}" /etc/corosync/corosync.conf
+  command: grep -q "{{ pacemaker_cluster_name }}" /etc/corosync/corosync.conf
   register: corosync_conf
   ignore_errors: true
   changed_when: false
@@ -26,7 +26,7 @@
 
 - name: Setup the cluster
   command: >
-    pcs cluster setup {{ cluster_name }}
+    pcs cluster setup {{ pacemaker_cluster_name }}
     {{ node1_hostname }} addr={{ node1_ip }}
     {{ node2_hostname }} addr={{ node2_ip }}
     --force
