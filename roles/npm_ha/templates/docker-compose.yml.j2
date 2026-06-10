@@ -12,10 +12,10 @@ services:
       - --bind-address=0.0.0.0
       - --log-basename="npm"
     environment:
-      MARIADB_ROOT_PASSWORD: "{{ mysql_root_password }}"
+      MARIADB_ROOT_PASSWORD: "{{ mariadb_root_password }}"
       MARIADB_DATABASE: "npm_edge"
       MARIADB_USER: "npm_adm"
-      MARIADB_PASSWORD: "{{ mysql_npm_password }}"
+      MARIADB_PASSWORD: "{{ mariadb_npm_password }}"
       TZ: "{{ timezone }}"
     volumes:
       - "{{ npm_mount_db }}/db/mysql:/var/lib/mysql"
@@ -39,7 +39,7 @@ services:
       DB_MYSQL_HOST: "db"
       DB_MYSQL_PORT: "3306"
       DB_MYSQL_USER: "npm_adm"
-      DB_MYSQL_PASSWORD: "{{ mysql_npm_password }}"
+      DB_MYSQL_PASSWORD: "{{ mariadb_npm_password }}"
       DB_MYSQL_NAME: "npm_edge"
       TZ: "{{ timezone }}"
     volumes:

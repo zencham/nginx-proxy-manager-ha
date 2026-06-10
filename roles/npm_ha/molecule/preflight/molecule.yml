@@ -35,7 +35,7 @@ provisioner:
         timezone: UTC
         hacluster_password: test-hacluster-pass
         drbd_secret: test-drbd-secret
-        mysql_root_password: test-root-pass
-        mysql_npm_password: test-npm-pass
+        mariadb_root_password: test-root-pass
+        mariadb_npm_password: test-npm-pass
 verifier:
   name: ansible
