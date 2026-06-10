@@ -1,0 +1,8 @@
+# inventory/group_vars/ha_nodes/vault.yml.example
+# Copy to inventory/group_vars/ha_nodes/vault.yml, fill in real values, then:
+#   ansible-vault encrypt inventory/group_vars/ha_nodes/vault.yml
+---
+hacluster_password: "CHANGE_ME"
+drbd_secret: "CHANGE_ME"
+mysql_root_password: "CHANGE_ME"
+mysql_npm_password: "CHANGE_ME"
