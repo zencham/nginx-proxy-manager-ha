@@ -10,7 +10,8 @@ drbd_port_db: 7791
 # DRBD initial-sync rate limit (avoids saturating the replication link on first sync)
 drbd_resync_rate: "10M"
 
-# Application paths on DRBD mounts
+# Application paths on DRBD mounts — fallback defaults only.
+# Authoritative values live in group_vars/ha_nodes/vars.yml.
 npm_compose_dir: /opt/npm/compose
 npm_mount_app: /mnt/npm_app
 npm_mount_db: /mnt/npm_db
@@ -20,7 +21,8 @@ npm_mount_db: /mnt/npm_db
 npm_image_version: "2.15.1"
 mariadb_image_version: "10.11.16"
 
-# NPM admin UI host port (mapped to container port 81)
+# NPM admin UI host port (mapped to container port 81) — fallback default only.
+# Authoritative value lives in group_vars/ha_nodes/vars.yml.
 npm_admin_port: 15625
 
 # Pacemaker resource timeouts

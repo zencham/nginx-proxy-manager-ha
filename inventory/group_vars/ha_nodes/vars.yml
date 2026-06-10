@@ -25,6 +25,12 @@ drbd_backing_dev_db:  /dev/sdb2
 drbd_resource_app: mib_npm_ha_drbd_app
 drbd_resource_db:  mib_npm_ha_drbd_db
 
+# NPM application paths (shared across npm_ha and npm_update roles)
+npm_compose_dir: /opt/npm/compose
+npm_mount_app: /mnt/npm_app
+npm_mount_db: /mnt/npm_db
+npm_admin_port: 15625
+
 # Container image versions — authoritative source for both npm_ha and npm_update roles.
 # Bump these values here, then run npm_update.yml to apply.
 npm_image_version: "2.15.1"

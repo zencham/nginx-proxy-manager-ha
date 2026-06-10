@@ -36,6 +36,7 @@
     timeout: "{{ npm_update_port_timeout }}"
   run_once: true
   delegate_to: localhost
+  become: false
 
 - name: Verify npm_app container is running the new image
   command: !unsafe "docker inspect npm_app --format '{{.Config.Image}}'"
