@@ -1,0 +1,27 @@
+---
+- name: Verify preflight stopped execution before creating artifacts
+  hosts: ha_nodes
+  become: yes
+  tasks:
+    - name: Check that compose directory was NOT created
+      stat:
+        path: "{{ npm_compose_dir }}"
+      register: compose_dir
+
+    - name: Assert compose directory does not exist
+      assert:
+        that: not compose_dir.stat.exists
+        fail_msg: >
+          Compose directory {{ npm_compose_dir }} exists —
+          preflight did not stop role execution as expected
+
+    - name: Check that npm-stack.service was NOT created
+      stat:
+        path: /etc/systemd/system/npm-stack.service
+      register: service_file
+
+    - name: Assert npm-stack.service does not exist
+      assert:
+        that: not service_file.stat.exists
+        fail_msg: >
+          npm-stack.service exists — preflight did not stop role execution as expected
