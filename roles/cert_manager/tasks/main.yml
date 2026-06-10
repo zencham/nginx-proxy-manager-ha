@@ -1,1 +1,27 @@
 ---
+- name: Install acme.sh on controller
+  import_tasks: install.yml
+
+- name: Authenticate to NPM API
+  uri:
+    url: "{{ npm_api_base_url }}/api/tokens"
+    method: POST
+    body_format: json
+    body:
+      identity: "{{ npm_admin_email }}"
+      secret: "{{ npm_admin_password }}"
+    status_code: 200
+  register: npm_auth
+  no_log: true
+
+- name: Set NPM token fact
+  set_fact:
+    npm_token: "{{ npm_auth.json.token }}"
+  no_log: true
+
+- name: Issue and upload cert per domain
+  include_tasks: issue.yml
+  loop: "{{ cert_domains }}"
+  loop_control:
+    loop_var: cert_domain
+    label: "{{ cert_domain }}"
