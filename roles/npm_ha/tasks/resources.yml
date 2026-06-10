@@ -7,44 +7,60 @@
   delegate_to: "{{ node1_hostname }}"
   changed_when: false
 
-- name: Configure DRBD promotable clones
-  command: "{{ item }}"
-  loop:
-    - >
-      pcs resource create drbd_app ocf:linbit:drbd
-      drbd_resource={{ drbd_resource_app }}
-      promotable notify=true
-      promoted-max=1 promoted-node-max=1
-      clone-max=2 clone-node-max=1
-    - >
-      pcs resource create drbd_db ocf:linbit:drbd
-      drbd_resource={{ drbd_resource_db }}
-      promotable notify=true
-      promoted-max=1 promoted-node-max=1
-      clone-max=2 clone-node-max=1
+- name: Create drbd_app promotable clone resource
+  command: >
+    pcs resource create drbd_app ocf:linbit:drbd
+    drbd_resource={{ drbd_resource_app }}
+    promotable notify=true
+    promoted-max=1 promoted-node-max=1
+    clone-max=2 clone-node-max=1
   run_once: true
   delegate_to: "{{ node1_hostname }}"
   when: group_check.rc != 0
 
-- name: Create application resources
-  command: "{{ item }}"
-  loop:
-    - >
-      pcs resource create fs_app ocf:heartbeat:Filesystem
-      device="{{ drbd_device_app }}"
-      directory="{{ npm_mount_app }}"
-      fstype="ext4"
-    - >
-      pcs resource create fs_db ocf:heartbeat:Filesystem
-      device="{{ drbd_device_db }}"
-      directory="{{ npm_mount_db }}"
-      fstype="ext4"
-    - >
-      pcs resource create npm_vip ocf:heartbeat:IPaddr2
-      ip={{ vip_address }}
-      cidr_netmask={{ vip_cidr }}
-      op monitor interval=30s
-    - pcs resource create npm_service systemd:npm-stack
+- name: Create drbd_db promotable clone resource
+  command: >
+    pcs resource create drbd_db ocf:linbit:drbd
+    drbd_resource={{ drbd_resource_db }}
+    promotable notify=true
+    promoted-max=1 promoted-node-max=1
+    clone-max=2 clone-node-max=1
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create fs_app filesystem resource
+  command: >
+    pcs resource create fs_app ocf:heartbeat:Filesystem
+    device="{{ drbd_device_app }}"
+    directory="{{ npm_mount_app }}"
+    fstype="ext4"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create fs_db filesystem resource
+  command: >
+    pcs resource create fs_db ocf:heartbeat:Filesystem
+    device="{{ drbd_device_db }}"
+    directory="{{ npm_mount_db }}"
+    fstype="ext4"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create npm_vip IP address resource
+  command: >
+    pcs resource create npm_vip ocf:heartbeat:IPaddr2
+    ip={{ vip_address }}
+    cidr_netmask={{ vip_cidr }}
+    op monitor interval=30s
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create npm_service systemd resource
+  command: pcs resource create npm_service systemd:npm-stack
   run_once: true
   delegate_to: "{{ node1_hostname }}"
   when: group_check.rc != 0
@@ -79,10 +95,15 @@
   delegate_to: "{{ node1_hostname }}"
   when: group_check.rc != 0
 
-- name: Wait for Pacemaker to mount DRBD drives
-  pause:
-    seconds: "{{ cluster_settle_wait }}"
+- name: Wait for npm_group resources to start
+  shell: pcs status resources | grep npm_service
+  register: npm_service_status
+  until: "'Started' in npm_service_status.stdout"
+  retries: 24
+  delay: 5
+  changed_when: false
   run_once: true
+  delegate_to: "{{ node1_hostname }}"
   when: group_check.rc != 0
 
 - name: Ensure application subdirectories exist on DRBD mounts
