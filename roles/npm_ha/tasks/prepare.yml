@@ -52,5 +52,5 @@
     regexp: "^[0-9.]+\\s+{{ item.hostname }}(\\s.*)?$"
     state: present
   loop:
-    - { ip: "{{ node1_ip }}", hostname: "{{ node1_hostname }}" }
-    - { ip: "{{ node2_ip }}", hostname: "{{ node2_hostname }}" }
+    - { ip: "{{ node1_address }}", hostname: "{{ node1_name }}" }
+    - { ip: "{{ node2_address }}", hostname: "{{ node2_name }}" }

@@ -4,7 +4,7 @@
   register: group_check
   ignore_errors: true
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   changed_when: false
 
 - name: Create drbd_app promotable clone resource
@@ -15,7 +15,7 @@
     promoted-max=1 promoted-node-max=1
     clone-max=2 clone-node-max=1
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Create drbd_db promotable clone resource
@@ -26,7 +26,7 @@
     promoted-max=1 promoted-node-max=1
     clone-max=2 clone-node-max=1
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Create fs_app filesystem resource
@@ -36,7 +36,7 @@
     directory="{{ npm_mount_app }}"
     fstype="ext4"
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Create fs_db filesystem resource
@@ -46,7 +46,7 @@
     directory="{{ npm_mount_db }}"
     fstype="ext4"
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Create npm_vip IP address resource
@@ -56,19 +56,19 @@
     cidr_netmask={{ vip_cidr }}
     op monitor interval=30s
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Create npm_service systemd resource
   command: pcs resource create npm_service systemd:npm-stack
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Group application resources
   command: pcs resource group add npm_group fs_app fs_db npm_vip npm_service
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Set colocation and order constraints
@@ -79,7 +79,7 @@
     - pcs constraint colocation add npm_group with promoted drbd_db-clone INFINITY
     - pcs constraint order promote drbd_db-clone then start npm_group
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Update resource timeouts
@@ -92,7 +92,7 @@
       op start timeout={{ npm_service_timeout }}
       op stop timeout={{ npm_service_timeout }}
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Wait for npm_group resources to start
@@ -103,7 +103,7 @@
   delay: 5
   changed_when: false
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Ensure application subdirectories exist on DRBD mounts
@@ -118,11 +118,11 @@
     - "{{ npm_mount_app }}/letsencrypt"
     - "{{ npm_mount_db }}/db/mysql"
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: group_check.rc != 0
 
 - name: Final cleanup — reset any Pacemaker failure states
   command: pcs resource cleanup
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   changed_when: false

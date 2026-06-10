@@ -7,21 +7,21 @@
   delay: 5
   changed_when: false
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
 
 - name: Check full cluster status for failed actions
   command: pcs status --full
   register: cluster_status
   changed_when: false
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
 
 - name: Assert no failed resource actions
   assert:
     that: "'Failed Resource Actions' not in cluster_status.stdout"
     fail_msg: "Pacemaker reports failed resource actions:\n{{ cluster_status.stdout }}"
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
 
 - name: Wait for DRBD disks to finish syncing and reach healthy state
   command: drbdadm status all

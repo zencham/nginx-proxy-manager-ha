@@ -28,7 +28,7 @@
 - name: Force primary role on node 1 to initiate first sync
   command: drbdadm primary --force all
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: drbd_init.changed | default(false)
 
 - name: Wait for app DRBD device node to be available
@@ -36,7 +36,7 @@
     path: "{{ drbd_device_app }}"
     timeout: 60
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: drbd_init.changed | default(false)
 
 - name: Wait for db DRBD device node to be available
@@ -44,7 +44,7 @@
     path: "{{ drbd_device_db }}"
     timeout: 60
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: drbd_init.changed | default(false)
 
 - name: Format app DRBD device as ext4
@@ -53,7 +53,7 @@
     dev: "{{ drbd_device_app }}"
     force: false
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: drbd_init.changed | default(false)
 
 - name: Format db DRBD device as ext4
@@ -62,5 +62,5 @@
     dev: "{{ drbd_device_db }}"
     force: false
   run_once: true
-  delegate_to: "{{ node1_hostname }}"
+  delegate_to: "{{ node1_name }}"
   when: drbd_init.changed | default(false)

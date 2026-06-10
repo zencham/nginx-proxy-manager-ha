@@ -12,23 +12,23 @@
 
 - name: Check app block device exists
   stat:
-    path: "{{ drbd_disk_app }}"
-  register: drbd_disk_app_stat
+    path: "{{ drbd_backing_dev_app }}"
+  register: drbd_backing_dev_app_stat
 
 - name: Assert app block device exists
   assert:
-    that: drbd_disk_app_stat.stat.exists
-    fail_msg: "Block device {{ drbd_disk_app }} does not exist on {{ inventory_hostname }}"
+    that: drbd_backing_dev_app_stat.stat.exists
+    fail_msg: "Block device {{ drbd_backing_dev_app }} does not exist on {{ inventory_hostname }}"
 
 - name: Check db block device exists
   stat:
-    path: "{{ drbd_disk_db }}"
-  register: drbd_disk_db_stat
+    path: "{{ drbd_backing_dev_db }}"
+  register: drbd_backing_dev_db_stat
 
 - name: Assert db block device exists
   assert:
-    that: drbd_disk_db_stat.stat.exists
-    fail_msg: "Block device {{ drbd_disk_db }} does not exist on {{ inventory_hostname }}"
+    that: drbd_backing_dev_db_stat.stat.exists
+    fail_msg: "Block device {{ drbd_backing_dev_db }} does not exist on {{ inventory_hostname }}"
 
 - name: Check free disk space on /
   shell: df --output=avail / | tail -1
@@ -44,7 +44,7 @@
 
 - name: Check peer node is reachable via SSH
   wait_for:
-    host: "{{ node2_ip if inventory_hostname == node1_hostname else node1_ip }}"
+    host: "{{ node2_address if inventory_hostname == node1_name else node1_address }}"
     port: 22
     timeout: 10
     state: started

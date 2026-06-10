@@ -12,15 +12,15 @@ resource {{ drbd_resource_app }} {
     resync-rate {{ drbd_resync_rate }};
   }
 
-  on {{ node1_hostname }} {
+  on {{ node1_name }} {
     device {{ drbd_device_app }};
-    disk {{ drbd_disk_app }};
-    address {{ node1_ip }}:{{ drbd_port_app }};
+    disk {{ drbd_backing_dev_app }};
+    address {{ node1_address }}:{{ drbd_port_app }};
   }
-  on {{ node2_hostname }} {
+  on {{ node2_name }} {
     device {{ drbd_device_app }};
-    disk {{ drbd_disk_app }};
-    address {{ node2_ip }}:{{ drbd_port_app }};
+    disk {{ drbd_backing_dev_app }};
+    address {{ node2_address }}:{{ drbd_port_app }};
   }
 }
 
@@ -37,14 +37,14 @@ resource {{ drbd_resource_db }} {
     resync-rate {{ drbd_resync_rate }};
   }
 
-  on {{ node1_hostname }} {
+  on {{ node1_name }} {
     device {{ drbd_device_db }};
-    disk {{ drbd_disk_db }};
-    address {{ node1_ip }}:{{ drbd_port_db }};
+    disk {{ drbd_backing_dev_db }};
+    address {{ node1_address }}:{{ drbd_port_db }};
   }
-  on {{ node2_hostname }} {
+  on {{ node2_name }} {
     device {{ drbd_device_db }};
-    disk {{ drbd_disk_db }};
-    address {{ node2_ip }}:{{ drbd_port_db }};
+    disk {{ drbd_backing_dev_db }};
+    address {{ node2_address }}:{{ drbd_port_db }};
   }
 }
