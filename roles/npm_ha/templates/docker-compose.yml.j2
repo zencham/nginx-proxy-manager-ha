@@ -1,0 +1,48 @@
+services:
+  db:
+    image: "mariadb:{{ mariadb_image_version }}"
+    container_name: "npm_db"
+    restart: "no"
+    command:
+      - --bind-address=0.0.0.0
+      - --log-basename="npm"
+    environment:
+      MARIADB_ROOT_PASSWORD: "{{ mysql_root_password }}"
+      MARIADB_DATABASE: "npm_edge"
+      MARIADB_USER: "npm_adm"
+      MARIADB_PASSWORD: "{{ mysql_npm_password }}"
+      TZ: "{{ timezone }}"
+    volumes:
+      - "{{ npm_mount_db }}/db/mysql:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot --password={{ mysql_root_password }} -Nse 'SELECT 1' >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+  app:
+    image: "jc21/nginx-proxy-manager:{{ npm_image_version }}"
+    container_name: "npm_app"
+    restart: "no"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "{{ npm_admin_port }}:81"
+    environment:
+      DB_MYSQL_HOST: "db"
+      DB_MYSQL_PORT: "3306"
+      DB_MYSQL_USER: "npm_adm"
+      DB_MYSQL_PASSWORD: "{{ mysql_npm_password }}"
+      DB_MYSQL_NAME: "npm_edge"
+      TZ: "{{ timezone }}"
+    volumes:
+      - "{{ npm_mount_app }}/data:/data"
+      - "{{ npm_mount_app }}/letsencrypt:/etc/letsencrypt"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:81/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
