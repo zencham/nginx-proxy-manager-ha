@@ -1,0 +1,34 @@
+---
+- name: Wait for npm_group resources to be started
+  shell: pcs status resources | grep npm_service
+  register: npm_service_final_status
+  until: "'Started' in npm_service_final_status.stdout"
+  retries: 24
+  delay: 5
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+
+- name: Check full cluster status for failed actions
+  command: pcs status --full
+  register: cluster_status
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+
+- name: Assert no failed resource actions
+  assert:
+    that: "'Failed Resource Actions' not in cluster_status.stdout"
+    fail_msg: "Pacemaker reports failed resource actions:\n{{ cluster_status.stdout }}"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+
+- name: Wait for DRBD disks to finish syncing and reach healthy state
+  command: drbdadm status all
+  register: drbd_final_status
+  until: >-
+    'Inconsistent' not in drbd_final_status.stdout
+    and 'Diskless' not in drbd_final_status.stdout
+  retries: 60
+  delay: 10
+  changed_when: false

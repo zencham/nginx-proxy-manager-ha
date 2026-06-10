@@ -1,0 +1,8 @@
+# vault_vars/vault.yml.example
+# Copy to vault_vars/vault.yml, fill in real values, then:
+#   ansible-vault encrypt vault_vars/vault.yml
+---
+hacluster_password: "CHANGE_ME"
+drbd_secret: "CHANGE_ME"
+mysql_root_password: "CHANGE_ME"
+mysql_npm_password: "CHANGE_ME"

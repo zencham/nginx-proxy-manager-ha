@@ -1,0 +1,38 @@
+---
+- name: Verify npm_ha file artifacts
+  hosts: ha_nodes
+  become: yes
+  tasks:
+    - name: Check docker-compose.yml is deployed
+      stat:
+        path: "{{ npm_compose_dir }}"
+      register: compose_dir
+
+    - name: Assert compose directory exists
+      assert:
+        that: compose_dir.stat.exists and compose_dir.stat.isdir
+        fail_msg: "Compose directory {{ npm_compose_dir }} was not created"
+
+    - name: Check npm-stack.service exists
+      stat:
+        path: /etc/systemd/system/npm-stack.service
+      register: service_file
+
+    - name: Assert npm-stack.service exists
+      assert:
+        that: service_file.stat.exists
+        fail_msg: "npm-stack.service systemd unit was not created"
+
+    - name: Check mount points exist
+      stat:
+        path: "{{ item }}"
+      register: mount_stat
+      loop:
+        - "{{ npm_mount_app }}"
+        - "{{ npm_mount_db }}"
+
+    - name: Assert mount points were created
+      assert:
+        that: item.stat.exists and item.stat.isdir
+        fail_msg: "Mount point {{ item.item }} was not created"
+      loop: "{{ mount_stat.results }}"

@@ -1,0 +1,128 @@
+---
+- name: Check if npm_group resource exists
+  command: pcs resource config npm_group
+  register: group_check
+  ignore_errors: true
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  changed_when: false
+
+- name: Create drbd_app promotable clone resource
+  command: >
+    pcs resource create drbd_app ocf:linbit:drbd
+    drbd_resource={{ drbd_resource_app }}
+    promotable notify=true
+    promoted-max=1 promoted-node-max=1
+    clone-max=2 clone-node-max=1
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create drbd_db promotable clone resource
+  command: >
+    pcs resource create drbd_db ocf:linbit:drbd
+    drbd_resource={{ drbd_resource_db }}
+    promotable notify=true
+    promoted-max=1 promoted-node-max=1
+    clone-max=2 clone-node-max=1
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create fs_app filesystem resource
+  command: >
+    pcs resource create fs_app ocf:heartbeat:Filesystem
+    device="{{ drbd_device_app }}"
+    directory="{{ npm_mount_app }}"
+    fstype="ext4"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create fs_db filesystem resource
+  command: >
+    pcs resource create fs_db ocf:heartbeat:Filesystem
+    device="{{ drbd_device_db }}"
+    directory="{{ npm_mount_db }}"
+    fstype="ext4"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create npm_vip IP address resource
+  command: >
+    pcs resource create npm_vip ocf:heartbeat:IPaddr2
+    ip={{ vip_address }}
+    cidr_netmask={{ vip_cidr }}
+    op monitor interval=30s
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Create npm_service systemd resource
+  command: pcs resource create npm_service systemd:npm-stack
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Group application resources
+  command: pcs resource group add npm_group fs_app fs_db npm_vip npm_service
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Set colocation and order constraints
+  command: "{{ item }}"
+  loop:
+    - pcs constraint colocation add promoted drbd_db-clone with promoted drbd_app-clone INFINITY
+    - pcs constraint order promote drbd_app-clone then promote drbd_db-clone
+    - pcs constraint colocation add npm_group with promoted drbd_db-clone INFINITY
+    - pcs constraint order promote drbd_db-clone then start npm_group
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Update resource timeouts
+  command: "{{ item }}"
+  loop:
+    - pcs resource update drbd_app op stop timeout={{ drbd_stop_timeout }}
+    - pcs resource update drbd_db op stop timeout={{ drbd_stop_timeout }}
+    - >
+      pcs resource update npm_service
+      op start timeout={{ npm_service_timeout }}
+      op stop timeout={{ npm_service_timeout }}
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Wait for npm_group resources to start
+  shell: pcs status resources | grep npm_service
+  register: npm_service_status
+  until: "'Started' in npm_service_status.stdout"
+  retries: 24
+  delay: 5
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Ensure application subdirectories exist on DRBD mounts
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ npm_mount_app }}/data"
+    - "{{ npm_mount_app }}/letsencrypt"
+    - "{{ npm_mount_db }}/db/mysql"
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: group_check.rc != 0
+
+- name: Final cleanup — reset any Pacemaker failure states
+  command: pcs resource cleanup
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  changed_when: false

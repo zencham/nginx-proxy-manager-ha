@@ -1,0 +1,50 @@
+---
+- name: Assert minimum Ansible version
+  assert:
+    that: ansible_version.full is version('2.14', '>=')
+    fail_msg: "Ansible >= 2.14 required, found {{ ansible_version.full }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Check DRBD kernel module is loadable
+  command: modprobe --dry-run drbd
+  changed_when: false
+
+- name: Check app block device exists
+  stat:
+    path: "{{ drbd_disk_app }}"
+  register: drbd_disk_app_stat
+
+- name: Assert app block device exists
+  assert:
+    that: drbd_disk_app_stat.stat.exists
+    fail_msg: "Block device {{ drbd_disk_app }} does not exist on {{ inventory_hostname }}"
+
+- name: Check db block device exists
+  stat:
+    path: "{{ drbd_disk_db }}"
+  register: drbd_disk_db_stat
+
+- name: Assert db block device exists
+  assert:
+    that: drbd_disk_db_stat.stat.exists
+    fail_msg: "Block device {{ drbd_disk_db }} does not exist on {{ inventory_hostname }}"
+
+- name: Check free disk space on /
+  shell: df --output=avail / | tail -1
+  register: root_free_kb
+  changed_when: false
+
+- name: Assert at least 2GB free on /
+  assert:
+    that: root_free_kb.stdout | trim | int >= 2097152
+    fail_msg: >
+      Only {{ (root_free_kb.stdout | trim | int / 1024 / 1024) | round(1) }}GB free on /
+      of {{ inventory_hostname }} — 2GB minimum required
+
+- name: Check peer node is reachable via SSH
+  wait_for:
+    host: "{{ node2_ip if inventory_hostname == node1_hostname else node1_ip }}"
+    port: 22
+    timeout: 10
+    state: started

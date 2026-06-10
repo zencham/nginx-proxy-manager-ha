@@ -1,0 +1,12 @@
+---
+- name: Converge — expect preflight failure on missing disks
+  hosts: ha_nodes
+  become: yes
+  tasks:
+    - block:
+        - include_role:
+            name: npm_ha
+      rescue:
+        - name: Preflight failed as expected
+          set_fact:
+            preflight_failed: true

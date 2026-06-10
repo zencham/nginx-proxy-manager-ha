@@ -1,0 +1,8 @@
+---
+- name: Deploy HA Cluster for NPM (Pacemaker, Corosync, DRBD)
+  hosts: ha_nodes
+  become: yes
+  vars_files:
+    - vault_vars/vault.yml
+  roles:
+    - role: npm_ha

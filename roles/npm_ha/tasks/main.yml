@@ -1,0 +1,28 @@
+---
+- name: Run pre-flight checks
+  import_tasks: preflight.yml
+  tags: [preflight, always]
+
+- name: Install packages and prepare hosts
+  import_tasks: prepare.yml
+  tags: prepare
+
+- name: Configure DRBD
+  import_tasks: drbd.yml
+  tags: drbd
+
+- name: Deploy NPM application stack
+  import_tasks: prepare_app.yml
+  tags: app
+
+- name: Configure Pacemaker/Corosync cluster
+  import_tasks: cluster.yml
+  tags: cluster
+
+- name: Configure Pacemaker resources
+  import_tasks: resources.yml
+  tags: resources
+
+- name: Verify cluster health
+  import_tasks: verify.yml
+  tags: [verify, resources]
