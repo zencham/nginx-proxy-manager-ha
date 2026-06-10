@@ -1,8 +1,1 @@
 ---
-cluster_name: "npm_ha_cluster"
-vip_address: "192.168.206.220"
-vip_cidr: "24"
-node1_hostname: "MIBTECH-NPM-PROD-01"
-node1_ip: "192.168.206.33"
-node2_hostname: "MIBTECH-NPM-PROD-02"
-node2_ip: "192.168.206.40"
