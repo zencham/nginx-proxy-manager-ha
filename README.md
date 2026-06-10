@@ -23,26 +23,58 @@ split-brain data protection without requiring external STONITH.
    - At least 2GB free on `/`
    - SSH key access from the Ansible controller
 2. Ansible >= 2.14 on the controller
+3. `.vault_pass` file in the project root containing the vault password (gitignored).
+   Create it after cloning: `echo -n 'your-vault-password' > .vault_pass && chmod 600 .vault_pass`
 
 ## Setup
 
 ### 1. Configure secrets
 
 ```bash
-cp vault_vars/vault.yml.example vault_vars/vault.yml
-# Edit vault_vars/vault.yml with real values
-ansible-vault encrypt vault_vars/vault.yml
+cp inventory/group_vars/ha_nodes/vault.yml.example inventory/group_vars/ha_nodes/vault.yml
+# Edit inventory/group_vars/ha_nodes/vault.yml with real values
+ansible-vault encrypt inventory/group_vars/ha_nodes/vault.yml
 ```
 
-Store the vault password in a password manager. To run the playbook:
+Store the vault password in a password manager and write it to `.vault_pass` (gitignored):
 
 ```bash
-ansible-playbook main.yml --ask-vault-pass
+echo -n 'your-vault-password' > .vault_pass
+chmod 600 .vault_pass
+```
+
+Then run the playbook (vault decrypts automatically via `.vault_pass`):
+
+```bash
+ansible-playbook main.yml
 ```
 
 ### 2. DRBD prerequisite
 
 The DRBD block devices (`/dev/sdb1`, `/dev/sdb2`) must exist and be partitioned before running the playbook. The role handles `create-md`, `up`, formatting, and Pacemaker resource creation automatically and idempotently.
+
+## New Deployment (Different Cluster)
+
+To deploy this role to a different cluster:
+
+1. Clone the repo.
+2. Edit `inventory/hosts` — replace hostnames and `ansible_host` IPs.
+3. Edit `inventory/group_vars/ha_nodes/vars.yml` — fill in your cluster topology
+   (node IPs/hostnames, VIP, disk devices, cluster name, timezone).
+4. Copy `inventory/group_vars/ha_nodes/vault.yml.example` to
+   `inventory/group_vars/ha_nodes/vault.yml`, fill in real secrets, encrypt:
+   ```bash
+   ansible-vault encrypt inventory/group_vars/ha_nodes/vault.yml
+   ```
+5. Write your vault password to `.vault_pass` (gitignored):
+   ```bash
+   echo -n 'your-vault-password' > .vault_pass
+   chmod 600 .vault_pass
+   ```
+6. Run:
+   ```bash
+   ansible-playbook main.yml
+   ```
 
 ## Selective Execution (Tags)
 
@@ -58,10 +90,10 @@ The DRBD block devices (`/dev/sdb1`, `/dev/sdb2`) must exist and be partitioned 
 
 ```bash
 # Re-deploy compose config only
-ansible-playbook main.yml --ask-vault-pass --tags app
+ansible-playbook main.yml --tags app
 
 # Re-run only cluster setup
-ansible-playbook main.yml --ask-vault-pass --tags cluster
+ansible-playbook main.yml --tags cluster
 ```
 
 ## Testing (Molecule)
@@ -78,19 +110,24 @@ molecule test -s preflight
 
 ## Key Defaults (overridable via inventory group_vars)
 
+These are role-level defaults. Deployment-specific config (node IPs, hostnames, VIP, disk
+devices, DRBD resource names, timezone) lives in `inventory/group_vars/ha_nodes/vars.yml`.
+
 | Variable | Default | Description |
 |---|---|---|
-| `drbd_disk_app` | `/dev/sdb1` | Underlying block device for app DRBD |
-| `drbd_disk_db` | `/dev/sdb2` | Underlying block device for db DRBD |
-| `drbd_device_app` | `/dev/drbd10` | DRBD virtual device for app |
-| `drbd_device_db` | `/dev/drbd11` | DRBD virtual device for db |
-| `npm_image_version` | `2.14.0` | NPM Docker image tag |
-| `mariadb_image_version` | `10.11.16` | MariaDB Docker image tag (pinned to the version running in production) |
+| `drbd_device_app` | `/dev/drbd10` | DRBD virtual device for app (kernel-managed) |
+| `drbd_device_db` | `/dev/drbd11` | DRBD virtual device for db (kernel-managed) |
+| `drbd_port_app` | `7790` | DRBD replication TCP port for app resource |
+| `drbd_port_db` | `7791` | DRBD replication TCP port for db resource |
 | `drbd_resync_rate` | `10M` | DRBD initial-sync rate limit |
+| `npm_compose_dir` | `/opt/npm/compose` | Docker Compose file directory |
+| `npm_mount_app` | `/mnt/npm_app` | Mount point for app DRBD device |
+| `npm_mount_db` | `/mnt/npm_db` | Mount point for db DRBD device |
+| `npm_image_version` | `2.14.0` | NPM Docker image tag |
+| `mariadb_image_version` | `10.11.16` | MariaDB Docker image tag |
 | `npm_admin_port` | `15625` | Host port for NPM admin UI |
 | `drbd_stop_timeout` | `90s` | Pacemaker DRBD stop timeout |
 | `npm_service_timeout` | `120s` | Pacemaker npm-stack start/stop timeout |
-| `timezone` | `Africa/Casablanca` | Container timezone |
 
 ## Network Requirements
 
@@ -114,3 +151,8 @@ exist. If you add perimeter or host firewall rules, the cluster needs:
   swapping it in on already-deployed nodes requires a planned in-place
   package replacement (conflicting packages, daemon restart) — out of scope
   for this role pass.
+- **STONITH (`fence_pve`)**: The original design spec included STONITH via `fence-agents-pve`
+  against the Proxmox hypervisor. It was deferred because it requires Proxmox API credentials,
+  VM ID mapping, and a dedicated task file. Until implemented, DRBD Protocol C provides
+  split-brain protection but a two-node cluster without STONITH cannot safely recover from
+  a partial network partition — both nodes may attempt primary. Track as a separate spec.
