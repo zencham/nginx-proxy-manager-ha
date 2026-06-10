@@ -17,5 +17,3 @@
 - import_tasks: resources.yml
   tags: resources
 
-- import_tasks: stonith.yml
-  tags: stonith

@@ -6,8 +6,3 @@ hacluster_password: "CHANGE_ME"
 drbd_secret: "CHANGE_ME"
 mysql_root_password: "CHANGE_ME"
 mysql_npm_password: "CHANGE_ME"
-proxmox_api_host: "192.168.x.x"
-proxmox_api_user: "root@pam"
-proxmox_api_password: "CHANGE_ME"
-proxmox_node1_vmid: 100
-proxmox_node2_vmid: 101
