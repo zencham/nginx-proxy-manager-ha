@@ -1,3 +1,8 @@
+networks:
+  npm_ha_net:
+    name: npm_ha_net
+    driver: bridge
+
 services:
   db:
     image: "mariadb:{{ mariadb_image_version }}"
@@ -14,8 +19,10 @@ services:
       TZ: "{{ timezone }}"
     volumes:
       - "{{ npm_mount_db }}/db/mysql:/var/lib/mysql"
+    networks:
+      - npm_ha_net
     healthcheck:
-      test: ["CMD-SHELL", "mariadb -uroot --password={{ mysql_root_password }} -Nse 'SELECT 1' >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MARIADB_ROOT_PASSWORD mariadb-admin ping --silent || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 15
@@ -38,6 +45,8 @@ services:
     volumes:
       - "{{ npm_mount_app }}/data:/data"
       - "{{ npm_mount_app }}/letsencrypt:/etc/letsencrypt"
+    networks:
+      - npm_ha_net
     depends_on:
       - db
     healthcheck:

@@ -12,26 +12,44 @@
       - pcs
       - drbd-utils
     state: present
-    update_cache: yes
+    update_cache: true
+    cache_valid_time: 3600
 
 - name: Ensure Docker service is enabled and started
   systemd:
     name: docker
     state: started
-    enabled: yes
+    enabled: true
 
 - name: Ensure pcsd service is enabled and started
   systemd:
     name: pcsd
     state: started
-    enabled: yes
+    enabled: true
+
+- name: Ensure pacemaker_remote service is disabled (unused in this topology)
+  systemd:
+    name: pacemaker_remote
+    state: stopped
+    enabled: false
 
 - name: Set hacluster user password
   user:
     name: hacluster
     password: "{{ hacluster_password | password_hash('sha512') }}"
+  no_log: true
 
 - name: Ensure DRBD kernel module is loaded
   modprobe:
     name: drbd
     state: present
+
+- name: Ensure cluster node hostnames are resolvable via /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.hostname }}"
+    regexp: "^[0-9.]+\\s+{{ item.hostname }}\\s*$"
+    state: present
+  loop:
+    - { ip: "{{ node1_ip }}", hostname: "{{ node1_hostname }}" }
+    - { ip: "{{ node2_ip }}", hostname: "{{ node2_hostname }}" }
