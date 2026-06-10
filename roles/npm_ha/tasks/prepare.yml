@@ -48,7 +48,7 @@
   ansible.builtin.lineinfile:
     path: /etc/hosts
     line: "{{ item.ip }} {{ item.hostname }}"
-    regexp: "^[0-9.]+\\s+{{ item.hostname }}\\s*$"
+    regexp: "^[0-9.]+\\s+{{ item.hostname }}(\\s.*)?$"
     state: present
   loop:
     - { ip: "{{ node1_ip }}", hostname: "{{ node1_hostname }}" }
