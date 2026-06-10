@@ -1,0 +1,35 @@
+---
+- name: "List existing NPM proxy hosts"
+  uri:
+    url: "{{ npm_api_base_url }}/api/nginx/proxy-hosts"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    status_code: 200
+  register: npm_proxy_hosts
+
+- name: "Set domain match pattern for {{ cert_domain }}"
+  set_fact:
+    _domain_match_pattern: "^([^.]+\\.)?{{ _domain_base | regex_escape }}$"
+
+- name: "Reassign cert {{ _cert_id }} to proxy hosts matching {{ cert_domain }}"
+  uri:
+    url: "{{ npm_api_base_url }}/api/nginx/proxy-hosts/{{ proxy_host.id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    body_format: json
+    body: >-
+      {{ (proxy_host | combine({'certificate_id': _cert_id | int}))
+         | dict2items
+         | rejectattr('key', 'in', ['id', 'created_on', 'modified_on', 'owner_user_id'])
+         | list | items2dict }}
+    status_code: 200
+  loop: "{{ npm_proxy_hosts.json }}"
+  loop_control:
+    loop_var: proxy_host
+    label: "{{ proxy_host.domain_names }}"
+  when: >-
+    (proxy_host.domain_names | select('match', _domain_match_pattern) | list | length > 0)
+    and (proxy_host.certificate_id | int != _cert_id | int)
+  changed_when: true

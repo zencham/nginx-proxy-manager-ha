@@ -17,42 +17,6 @@
     _key_pem: "{{ key_pem_b64.content | b64decode }}"
   no_log: true
 
-- name: "List existing NPM certificates"
-  uri:
-    url: "{{ npm_api_base_url }}/api/nginx/certificates"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ npm_token }}"
-    status_code: 200
-  register: npm_certs_list
-  no_log: true
-
-- name: "Find existing cert entry for {{ cert_domain }}"
-  set_fact:
-    _existing_cert: >-
-      {{ npm_certs_list.json
-         | selectattr('nice_name', 'equalto', cert_domain)
-         | list | first | default({}) }}
-
-- name: "Create new NPM cert entry for {{ cert_domain }}"
-  uri:
-    url: "{{ npm_api_base_url }}/api/nginx/certificates"
-    method: POST
-    headers:
-      Authorization: "Bearer {{ npm_token }}"
-    body_format: json
-    body:
-      provider: "other"
-      nice_name: "{{ cert_domain }}"
-    status_code: [200, 201]
-  register: npm_cert_create
-  when: "'id' not in _existing_cert"
-  no_log: true
-
-- name: "Set cert ID fact for {{ cert_domain }}"
-  set_fact:
-    _cert_id: "{{ _existing_cert.id if 'id' in _existing_cert else npm_cert_create.json.id }}"
-
 - name: "Upload cert files to NPM for {{ cert_domain }}"
   uri:
     url: "{{ npm_api_base_url }}/api/nginx/certificates/{{ _cert_id }}/upload"

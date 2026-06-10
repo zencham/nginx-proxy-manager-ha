@@ -45,6 +45,12 @@
       {{ (not cert_file_stat.stat.exists and acme_issue.rc | default(-1) == 0)
          or (cert_file_stat.stat.exists and acme_renew.rc | default(-1) == 0) }}
 
+- name: "Look up NPM cert entry for {{ cert_domain }}"
+  include_tasks: cert_lookup.yml
+
 - name: "Upload cert to NPM for {{ cert_domain }}"
   include_tasks: upload.yml
   when: cert_renewed | bool
+
+- name: "Sync NPM proxy hosts for {{ cert_domain }}"
+  include_tasks: sync_proxy_hosts.yml
