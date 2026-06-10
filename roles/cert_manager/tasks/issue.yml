@@ -1,1 +1,48 @@
 ---
+- name: "Set domain facts for {{ cert_domain }}"
+  set_fact:
+    _domain_base: "{{ cert_domain | regex_replace('^\\*\\.', '') }}"
+    _cert_fullchain: "{{ acme_sh_dir }}/{{ cert_domain }}/fullchain.cer"
+    _cert_key: "{{ acme_sh_dir }}/{{ cert_domain }}/{{ cert_domain }}.key"
+
+- name: "Check if cert already exists for {{ cert_domain }}"
+  stat:
+    path: "{{ _cert_fullchain }}"
+  register: cert_file_stat
+
+- name: "Issue cert for {{ cert_domain }} (first run)"
+  shell: >
+    {{ acme_sh_dir }}/acme.sh --issue
+    -d "{{ cert_domain }}"
+    -d "{{ _domain_base }}"
+    --dns dns_cf
+    --server {{ acme_server }}
+    --home {{ acme_sh_dir }}
+  environment:
+    CF_Token: "{{ cloudflare_tokens[cert_domain] }}"
+  when: not cert_file_stat.stat.exists
+  register: acme_issue
+  changed_when: acme_issue.rc == 0
+
+- name: "Renew cert for {{ cert_domain }} (subsequent runs)"
+  shell: >
+    {{ acme_sh_dir }}/acme.sh --renew
+    -d "{{ cert_domain }}"
+    --days {{ cert_renew_days }}
+    --home {{ acme_sh_dir }}
+  environment:
+    CF_Token: "{{ cloudflare_tokens[cert_domain] }}"
+  when: cert_file_stat.stat.exists
+  register: acme_renew
+  failed_when: acme_renew.rc not in [0, 2]
+  changed_when: acme_renew.rc == 0
+
+- name: "Set cert_renewed fact for {{ cert_domain }}"
+  set_fact:
+    cert_renewed: >-
+      {{ (not cert_file_stat.stat.exists and acme_issue.rc | default(-1) == 0)
+         or (cert_file_stat.stat.exists and acme_renew.rc | default(-1) == 0) }}
+
+- name: "Upload cert to NPM for {{ cert_domain }}"
+  include_tasks: upload.yml
+  when: cert_renewed | bool
