@@ -23,14 +23,12 @@
   run_once: true
   delegate_to: "{{ node1_hostname }}"
 
-- name: Check DRBD replication status
+- name: Wait for DRBD disks to finish syncing and reach healthy state
   command: drbdadm status all
   register: drbd_final_status
+  until: >-
+    'Inconsistent' not in drbd_final_status.stdout
+    and 'Diskless' not in drbd_final_status.stdout
+  retries: 60
+  delay: 10
   changed_when: false
-
-- name: Assert DRBD disks are healthy
-  assert:
-    that:
-      - "'Diskless' not in drbd_final_status.stdout"
-      - "'Inconsistent' not in drbd_final_status.stdout"
-    fail_msg: "DRBD disk state is not healthy on {{ inventory_hostname }}:\n{{ drbd_final_status.stdout }}"
