@@ -1,0 +1,11 @@
+---
+npm_api_base_url: "http://192.168.206.220:15625"
+npm_admin_email: "admin@mibtech.ma"
+acme_email: "admin@mibtech.ma"
+
+cert_domains:
+  - "*.mibtech.ma"
+  - "*.visionhis.ma"
+  - "*.myakdital.ma"
+
+cert_renew_days: 30

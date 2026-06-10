@@ -1,0 +1,10 @@
+# inventory/group_vars/controller/vault.yml.example
+# Copy to inventory/group_vars/controller/vault.yml, fill in real values, then:
+#   ansible-vault encrypt inventory/group_vars/controller/vault.yml --encrypt-vault-id default
+---
+cloudflare_tokens:
+  "*.mibtech.ma": "CHANGE_ME"
+  "*.visionhis.ma": "CHANGE_ME"
+  "*.myakdital.ma": "CHANGE_ME"
+
+npm_admin_password: "CHANGE_ME"

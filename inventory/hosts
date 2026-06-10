@@ -1,3 +1,6 @@
 [ha_nodes]
 MIBTECH-NPM-PROD-01 ansible_host=192.168.206.33
 MIBTECH-NPM-PROD-02 ansible_host=192.168.206.40
+
+[controller]
+localhost ansible_connection=local
