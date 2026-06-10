@@ -1,5 +1,2 @@
-# Plaintext vault — remove this line after encrypting vault_vars/vault.yml
-vault_vars/vault.yml
-
 # Ansible retry files
 *.retry
