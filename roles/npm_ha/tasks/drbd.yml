@@ -5,7 +5,7 @@
     dest: /etc/drbd.d/npm-ha.res
     owner: root
     group: root
-    mode: '0644'
+    mode: '0600'
 
 - name: Check if DRBD metadata already exists
   shell: >
@@ -23,28 +23,44 @@
 - name: Bring DRBD resources up
   command: drbdadm up all
   ignore_errors: true
-  when: drbd_init.changed or drbd_md_check.rc != 0
+  when: drbd_init.changed | default(false) or drbd_md_check.rc != 0
 
 - name: Force primary role on node 1 to initiate first sync
   command: drbdadm primary --force all
   run_once: true
   delegate_to: "{{ node1_hostname }}"
-  when: drbd_init.changed
+  when: drbd_init.changed | default(false)
+
+- name: Wait for app DRBD device node to be available
+  wait_for:
+    path: "{{ drbd_device_app }}"
+    timeout: 60
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: drbd_init.changed | default(false)
+
+- name: Wait for db DRBD device node to be available
+  wait_for:
+    path: "{{ drbd_device_db }}"
+    timeout: 60
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: drbd_init.changed | default(false)
 
 - name: Format app DRBD device as ext4
   filesystem:
     fstype: ext4
     dev: "{{ drbd_device_app }}"
-    force: no
+    force: false
   run_once: true
   delegate_to: "{{ node1_hostname }}"
-  when: drbd_init.changed
+  when: drbd_init.changed | default(false)
 
 - name: Format db DRBD device as ext4
   filesystem:
     fstype: ext4
     dev: "{{ drbd_device_db }}"
-    force: no
+    force: false
   run_once: true
   delegate_to: "{{ node1_hostname }}"
-  when: drbd_init.changed
+  when: drbd_init.changed | default(false)

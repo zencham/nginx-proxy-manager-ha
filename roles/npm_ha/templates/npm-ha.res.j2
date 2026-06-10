@@ -8,6 +8,10 @@ resource {{ drbd_resource_app }} {
     shared-secret "{{ drbd_secret }}";
   }
 
+  disk {
+    resync-rate {{ drbd_resync_rate }};
+  }
+
   on {{ node1_hostname }} {
     device {{ drbd_device_app }};
     disk {{ drbd_disk_app }};
@@ -27,6 +31,10 @@ resource {{ drbd_resource_db }} {
   net {
     cram-hmac-alg sha256;
     shared-secret "{{ drbd_secret }}";
+  }
+
+  disk {
+    resync-rate {{ drbd_resync_rate }};
   }
 
   on {{ node1_hostname }} {

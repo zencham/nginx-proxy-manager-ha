@@ -15,6 +15,10 @@ drbd_port_db: 7791
 drbd_resource_app: mib_npm_ha_drbd_npm
 drbd_resource_db: mib_npm_ha_drbd_db
 
+# DRBD initial-sync rate limit (avoids saturating the replication link
+# during the first full sync after drbdadm primary --force all)
+drbd_resync_rate: "10M"
+
 # Application paths
 npm_compose_dir: /opt/npm/compose
 npm_mount_app: /mnt/npm_app
