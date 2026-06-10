@@ -1,0 +1,6 @@
+---
+- name: Converge
+  hosts: ha_nodes
+  become: yes
+  roles:
+    - role: npm_ha
