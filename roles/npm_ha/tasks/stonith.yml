@@ -1,0 +1,47 @@
+---
+- name: Install fence-agents-pve
+  apt:
+    name: fence-agents-pve
+    state: present
+
+- name: Check if STONITH resources already exist
+  command: pcs stonith config stonith-{{ node1_hostname }} stonith-{{ node2_hostname }}
+  register: stonith_check
+  ignore_errors: true
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  changed_when: false
+
+- name: Create STONITH resource for node 1
+  command: >
+    pcs stonith create stonith-{{ node1_hostname }} fence_pve
+    pcmk_host_list={{ node1_hostname }}
+    ip={{ proxmox_api_host }}
+    username={{ proxmox_api_user }}
+    password={{ proxmox_api_password }}
+    plug={{ proxmox_node1_vmid }}
+    ssl_insecure=1
+    op monitor interval=60s
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: stonith_check.rc != 0
+
+- name: Create STONITH resource for node 2
+  command: >
+    pcs stonith create stonith-{{ node2_hostname }} fence_pve
+    pcmk_host_list={{ node2_hostname }}
+    ip={{ proxmox_api_host }}
+    username={{ proxmox_api_user }}
+    password={{ proxmox_api_password }}
+    plug={{ proxmox_node2_vmid }}
+    ssl_insecure=1
+    op monitor interval=60s
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: stonith_check.rc != 0
+
+- name: Enable STONITH in cluster properties
+  command: pcs property set stonith-enabled=true
+  run_once: true
+  delegate_to: "{{ node1_hostname }}"
+  when: stonith_check.rc != 0
