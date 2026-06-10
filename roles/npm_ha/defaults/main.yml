@@ -1,27 +1,27 @@
 ---
 # DRBD virtual device paths (created by DRBD kernel module — not the physical disk)
 drbd_device_app: /dev/drbd10
-drbd_device_db:  /dev/drbd11
+drbd_device_db: /dev/drbd11
 
 # DRBD replication ports
 drbd_port_app: 7790
-drbd_port_db:  7791
+drbd_port_db: 7791
 
 # DRBD initial-sync rate limit (avoids saturating the replication link on first sync)
 drbd_resync_rate: "10M"
 
 # Application paths on DRBD mounts
 npm_compose_dir: /opt/npm/compose
-npm_mount_app:   /mnt/npm_app
-npm_mount_db:    /mnt/npm_db
+npm_mount_app: /mnt/npm_app
+npm_mount_db: /mnt/npm_db
 
 # Container image versions (pinned)
-npm_image_version:      "2.14.0"
-mariadb_image_version:  "10.11.16"
+npm_image_version: "2.14.0"
+mariadb_image_version: "10.11.16"
 
 # NPM admin UI host port (mapped to container port 81)
 npm_admin_port: 15625
 
 # Pacemaker resource timeouts
-drbd_stop_timeout:    90s
-npm_service_timeout:  120s
+drbd_stop_timeout: 90s
+npm_service_timeout: 120s
