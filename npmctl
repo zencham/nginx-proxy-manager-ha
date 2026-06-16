@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve repo root (script's own dir) so ansible.cfg is always found.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRY_RUN="${NPMCTL_DRY_RUN:-0}"
+
+# --- output helpers ---
+die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+info() { printf '%s\n' "$*"; }
+
+# run <cmd...> : execute, or under dry-run print what would run.
+run() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'would-run: %s\n' "$*"
+    return 0
+  fi
+  "$@"
+}
+
+# --- command functions (filled in by later tasks) ---
+cmd_help() {
+  cat <<'EOF'
+npmctl — manage the NPM HA cluster
+
+Usage: npmctl <command> [flags]
+       npmctl              (no args: interactive menu)
+
+Commands:
+  deploy        Safe converge: drift-check + backup, then main.yml, then verify
+  drift         Check repo vs live config drift
+  backup        Snapshot NPM proxy hosts
+  verify        Verify proxy hosts against the snapshot
+  restore       Restore missing proxy hosts from the snapshot
+  update        Rolling NPM image update
+  cert          Issue/renew TLS certificates
+  status        Show cluster / DRBD / VIP health
+  logs          Tail NPM container logs
+  vault-edit    Edit an encrypted vault (ha_nodes|controller)
+  help          Show this help
+EOF
+}
+
+# --- dispatch ---
+dispatch() {
+  local cmd="${1:-}"; shift || true
+  case "$cmd" in
+    help|-h|--help) cmd_help ;;
+    *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
+  esac
+}
+
+main() {
+  cd "$SCRIPT_DIR"
+  [[ -f ansible.cfg ]] || die "must be run from the project root (ansible.cfg not found)"
+  dispatch "$@"
+}
+
+main "$@"
