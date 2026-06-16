@@ -105,6 +105,41 @@ cmd_main() { run_step "converge (main.yml)" ansible-playbook main.yml "$@"; }
 _vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 _port() { sed -nE 's/^npm_admin_port:[[:space:]]*"?([0-9]+)"?.*/\1/p'   inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 
+# Known cluster nodes (from group_vars, with MIBTECH fallback in _node_full).
+_node1() { sed -nE 's/^node1_name:[[:space:]]*"?([A-Za-z0-9.-]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+_node2() { sed -nE 's/^node2_name:[[:space:]]*"?([A-Za-z0-9.-]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+
+# _node_short <full> : MIBTECH-NPM-PROD-01 -> PROD-01 (else echo input unchanged).
+_node_short() {
+  local n="$1"
+  if [[ "$n" =~ (PROD-[0-9]+)$ ]]; then printf '%s' "${BASH_REMATCH[1]}"; else printf '%s' "$n"; fi
+}
+
+# _node_full <short|full> : resolve to a canonical full cluster node name, or rc 1.
+_node_full() {
+  local arg="$1" n1 n2; n1="$(_node1)"; n2="$(_node2)"
+  n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  case "$arg" in
+    "$n1"|"$(_node_short "$n1")") printf '%s' "$n1" ;;
+    "$n2"|"$(_node_short "$n2")") printf '%s' "$n2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _parse_nodes <pcs-status-nodes-text> <active-full> : emit "state<TAB>icon short  ROLE".
+# state: ok=active, bad=standby (reduced redundancy), dim=passive online.
+_parse_nodes() {
+  local text="$1" active="$2" n short standby_line
+  standby_line="$(printf '%s\n' "$text" | grep -E '^ *Standby:' | head -1)"
+  for n in "$(_node1)" "$(_node2)"; do
+    [[ -z "$n" ]] && continue
+    short="$(_node_short "$n")"
+    if [[ "$n" == "$active" ]]; then printf 'ok\t● %s  ACTIVE\n' "$short"
+    elif printf '%s' "$standby_line" | grep -qF "$n"; then printf 'bad\t⊘ %s  STANDBY\n' "$short"
+    else printf 'dim\t○ %s  passive\n' "$short"; fi
+  done
+}
+
 # _parse_drbd <text> : emit "ok|bad<TAB>app|db<TAB>detail" per DRBD minor (10=app,11=db).
 _parse_drbd() {
   local text="$1" line label st cs ds

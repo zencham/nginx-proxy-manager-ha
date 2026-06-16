@@ -108,5 +108,30 @@ echo "== Task P4: run_step =="
 out="$(NPMCTL_DRY_RUN=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; run_step lbl ansible-playbook foo.yml' 2>/dev/null)"
 check "run_step dry-run prints would-run" "would-run: ansible-playbook foo.yml" "$out"
 
+echo "== Task M1: node helpers =="
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _node_short MIBTECH-NPM-PROD-01' 2>/dev/null)"
+check "node_short strips prefix" "PROD-01" "$out"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _node_full PROD-02' 2>/dev/null)"
+check "node_full from short" "MIBTECH-NPM-PROD-02" "$out"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _node_full MIBTECH-NPM-PROD-01' 2>/dev/null)"
+check "node_full from full" "MIBTECH-NPM-PROD-01" "$out"
+bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _node_full BOGUS' >/dev/null 2>&1; check_rc "node_full rejects bogus" 1 "$?"
+nodes_text="Pacemaker Nodes:
+ Online: MIBTECH-NPM-PROD-01 MIBTECH-NPM-PROD-02
+ Standby:
+ Standby with resource(s) running:
+ Offline:"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_nodes "$1" "$2"' _ "$nodes_text" "MIBTECH-NPM-PROD-01" 2>/dev/null)"
+check "parse_nodes active row" "ACTIVE" "$out"
+check "parse_nodes active is PROD-01" "PROD-01" "$out"
+check "parse_nodes passive row" "passive" "$out"
+nodes_sb="Pacemaker Nodes:
+ Online: MIBTECH-NPM-PROD-01
+ Standby: MIBTECH-NPM-PROD-02
+ Offline:"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_nodes "$1" "$2"' _ "$nodes_sb" "MIBTECH-NPM-PROD-01" 2>/dev/null)"
+check "parse_nodes standby row" "STANDBY" "$out"
+check "parse_nodes standby is bad" "bad	" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
