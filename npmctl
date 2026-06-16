@@ -217,6 +217,18 @@ cmd_status() {
     out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
   done <<< "$(_parse_pcs "$pcs_raw")"
 
+  # Nodes: active = where npm_vip is Started (from the same pcs_raw).
+  local active nodes_raw color
+  active="$(printf '%s\n' "$pcs_raw" | grep -F 'npm_vip' | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+  nodes_raw="$(ansible "${active:-$(_node1)}" -b -o -m shell -a 'pcs status nodes' 2>/dev/null | sed 's/\\n/\n/g')"
+  out+=( 'Nodes' )
+  while IFS=$'\t' read -r st detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    case "$st" in ok) color="$C_GREEN" ;; bad) color="$C_RED" ;; *) color='' ;; esac
+    out+=( "  ${color}${detail}${C_RESET}" )
+  done <<< "$(_parse_nodes "$nodes_raw" "$active")"
+
   out+=( "VIP ${vip}:${port}" )
   if [[ "$http" == 2* || "$http" == 3* ]]; then out+=( "$(_row ok "$(printf '%-11s' HTTP)" "$http")" )
   else out+=( "$(_row bad "$(printf '%-11s' HTTP)" "$http")" ); bad=$((bad+1)); fi
