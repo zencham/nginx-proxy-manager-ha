@@ -1,8 +1,14 @@
 ---
-- name: Verify (and optionally restore) NPM reverse-proxy configuration
+- name: Verify NPM reverse-proxy configuration survived re-converge
   hosts: controller
   gather_facts: false
-  roles:
-    - role: proxy_guard
-  # Default run = verify only. `--tags restore` runs the restore path.
-  tags: verify
+  tasks:
+    - name: Authenticate to NPM API
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: auth.yml
+
+    - name: Verify proxy hosts are all present
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: verify.yml

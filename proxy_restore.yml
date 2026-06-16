@@ -1,5 +1,5 @@
 ---
-- name: Snapshot NPM reverse-proxy configuration
+- name: Restore missing NPM proxy hosts from the latest snapshot
   hosts: controller
   gather_facts: false
   tasks:
@@ -8,7 +8,7 @@
         name: proxy_guard
         tasks_from: auth.yml
 
-    - name: Snapshot NPM proxy configuration
+    - name: Restore missing proxy hosts
       ansible.builtin.import_role:
         name: proxy_guard
-        tasks_from: backup.yml
+        tasks_from: restore.yml

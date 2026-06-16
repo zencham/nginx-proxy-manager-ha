@@ -211,12 +211,14 @@ ansible-playbook proxy_verify.yml      # assert nothing was lost
 If verify reports missing hosts, restore them from the snapshot:
 
 ```bash
-ansible-playbook proxy_verify.yml --tags restore
+ansible-playbook proxy_restore.yml
 ```
 
-Snapshots are written to `backups/` (gitignored — they contain live domain
-config). `proxy_backup.yml` and `proxy_verify.yml` are GET-only and safe to run
-against production; `--tags restore` is the only path that writes to NPM.
+Each operation is a separate playbook on purpose: running one can never trigger
+another, so `proxy_verify.yml` can never re-snapshot over the pre-converge
+baseline. Snapshots are written to `backups/` (gitignored — they contain live
+domain config). `proxy_backup.yml` and `proxy_verify.yml` are GET-only and safe
+to run against production; `proxy_restore.yml` is the only path that writes to NPM.
 
 Set `proxy_guard_sample_domain` (role default) to a real domain to also probe a
 live site through the VIP during verify.
