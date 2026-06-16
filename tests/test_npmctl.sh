@@ -64,5 +64,12 @@ esc_count="$(NO_COLOR=1 NPMCTL_DRY_RUN=1 $NPMCTL status 2>/dev/null | tr -cd '\0
 check "NO_COLOR strips ANSI" "0" "$esc_count"
 # Sanity: the same status output, when it WOULD color (forced palette), is still escape-free under capture (non-TTY) — guard is correct either way.
 
+echo "== Task 5b: interactive menu (pty regression) =="
+if command -v python3 >/dev/null 2>&1; then
+  if python3 tests/test_npmctl_menu.py; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
+else
+  printf '  skip menu pty test (python3 not found)\n'
+fi
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]

@@ -168,25 +168,27 @@ ui_banner() {
 }
 
 # ui_menu <prompt> <item1> <item2> ... : arrow-key + number select; echoes chosen item.
+# ui_menu <prompt> <item1> ... : draws to /dev/tty and reads keys from /dev/tty so
+# the ONLY thing on stdout is the chosen item (safe under choice="$(ui_menu ...)").
 ui_menu() {
   local prompt="$1"; shift
   local items=("$@") sel=0 key i
-  tput civis 2>/dev/null || true
+  tput civis >/dev/tty 2>/dev/null || true
   while true; do
-    printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_RESET"
+    printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_RESET" >/dev/tty
     for i in "${!items[@]}"; do
-      if [[ "$i" == "$sel" ]]; then printf '  %s› %s%s\n' "$C_GREEN" "${items[$i]}" "$C_RESET"
-      else printf '    %s\n' "${items[$i]}"; fi
+      if [[ "$i" == "$sel" ]]; then printf '  %s› %s%s\n' "$C_GREEN" "${items[$i]}" "$C_RESET" >/dev/tty
+      else printf '    %s\n' "${items[$i]}" >/dev/tty; fi
     done
-    IFS= read -rsn1 key
-    if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.001 key || true
+    IFS= read -rsn1 key </dev/tty
+    if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.001 key </dev/tty || true
       case "$key" in '[A') ((sel>0)) && ((sel--));; '[B') ((sel<${#items[@]}-1)) && ((sel++));; esac
     elif [[ "$key" == "" ]]; then break
     elif [[ "$key" =~ ^[0-9]$ ]] && (( key>=1 && key<=${#items[@]} )); then sel=$((key-1)); break
     fi
-    printf '\e[%dA' "$(( ${#items[@]} + 1 ))"
+    printf '\e[%dA' "$(( ${#items[@]} + 1 ))" >/dev/tty
   done
-  tput cnorm 2>/dev/null || true
+  tput cnorm >/dev/tty 2>/dev/null || true
   printf '%s' "${items[$sel]}"
 }
 
