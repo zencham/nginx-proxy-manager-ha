@@ -1,0 +1,10 @@
+---
+# Ansible Galaxy collection dependencies.
+# Install before the first run:
+#   ansible-galaxy collection install -r requirements.yml
+#
+# community.general provides the `filesystem` (roles/npm_ha/tasks/drbd.yml) and
+# `modprobe` (roles/npm_ha/tasks/prepare.yml) modules the npm_ha role relies on.
+collections:
+  - name: community.general
+    version: ">=4.0.0"

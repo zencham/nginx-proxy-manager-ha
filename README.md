@@ -23,7 +23,10 @@ split-brain data protection without requiring external STONITH.
    - At least 2GB free on `/`
    - SSH key access from the Ansible controller
 2. Ansible >= 2.14 on the controller
-3. `.vault_pass` file in the project root containing the vault password (gitignored).
+3. Required Ansible collections installed on the controller:
+   `ansible-galaxy collection install -r requirements.yml`
+   (provides the `community.general` `filesystem` and `modprobe` modules)
+4. `.vault_pass` file in the project root containing the vault password (gitignored).
    Create it after cloning: `echo -n 'your-vault-password' > .vault_pass && chmod 600 .vault_pass`
 
 ## Setup
