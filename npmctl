@@ -70,6 +70,7 @@ Commands:
   update        Rolling NPM image update
   cert          Issue/renew TLS certificates
   status        Show cluster / DRBD / VIP health
+  maintenance   Drain a node for maintenance (standby) / end <node>
   logs          Tail NPM container logs
   vault-edit    Edit an encrypted vault (ha_nodes|controller)
   help          Show this help
@@ -104,6 +105,60 @@ cmd_main() { run_step "converge (main.yml)" ansible-playbook main.yml "$@"; }
 # VIP/admin port: parsed from group_vars with documented fallbacks.
 _vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 _port() { sed -nE 's/^npm_admin_port:[[:space:]]*"?([0-9]+)"?.*/\1/p'   inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+
+# Known cluster nodes (from group_vars, with MIBTECH fallback in _node_full).
+_node1() { sed -nE 's/^node1_name:[[:space:]]*"?([A-Za-z0-9.-]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+_node2() { sed -nE 's/^node2_name:[[:space:]]*"?([A-Za-z0-9.-]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+
+# _node_short <full> : MIBTECH-NPM-PROD-01 -> PROD-01 (else echo input unchanged).
+_node_short() {
+  local n="$1"
+  if [[ "$n" =~ (PROD-[0-9]+)$ ]]; then printf '%s' "${BASH_REMATCH[1]}"; else printf '%s' "$n"; fi
+}
+
+# _node_full <short|full> : resolve to a canonical full cluster node name, or rc 1.
+_node_full() {
+  local arg="$1" n1 n2; n1="$(_node1)"; n2="$(_node2)"
+  n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  case "$arg" in
+    "$n1"|"$(_node_short "$n1")") printf '%s' "$n1" ;;
+    "$n2"|"$(_node_short "$n2")") printf '%s' "$n2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _parse_nodes <pcs-status-nodes-text> <active-full> : emit "state<TAB>icon short  ROLE".
+# state: ok=active, bad=standby (reduced redundancy), dim=passive online.
+_parse_nodes() {
+  local text="$1" active="$2" n short standby_line
+  standby_line="$(printf '%s\n' "$text" | grep -E '^ *Standby:' | head -1)"
+  for n in "$(_node1)" "$(_node2)"; do
+    [[ -z "$n" ]] && continue
+    short="$(_node_short "$n")"
+    if [[ "$n" == "$active" ]]; then printf 'ok\t● %s  ACTIVE\n' "$short"
+    elif printf '%s' "$standby_line" | grep -qF "$n"; then printf 'bad\t⊘ %s  STANDBY\n' "$short"
+    else printf 'dim\t○ %s  passive\n' "$short"; fi
+  done
+}
+
+# _maint_precheck <drbd-text> <nodes-text> <drain-full> : 0 if safe to drain.
+# Safe = peer is Online (not standby/offline) AND every DRBD disk state is
+# UpToDate/UpToDate (no Inconsistent/Diskless/Unknown anywhere).
+_maint_precheck() {
+  local drbd="$1" nodes="$2" drain="$3" peer n1 n2
+  n1="$(_node1)"; n2="$(_node2)"; n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  if [[ "$drain" == "$n1" ]]; then peer="$n2"; else peer="$n1"; fi
+  if ! printf '%s\n' "$nodes" | grep -E '^ *Online:' | grep -qF "$peer"; then
+    warn "maintenance precheck: peer $peer is not Online"; return 1
+  fi
+  if printf '%s\n' "$nodes" | grep -E '^ *(Standby|Offline):' | grep -qF "$peer"; then
+    warn "maintenance precheck: peer $peer is in standby/offline"; return 1
+  fi
+  if printf '%s\n' "$drbd" | grep -oE 'ds:[A-Za-z]+/[A-Za-z]+' | grep -qvE 'ds:UpToDate/UpToDate'; then
+    warn "maintenance precheck: DRBD not UpToDate on both nodes"; return 1
+  fi
+  return 0
+}
 
 # _parse_drbd <text> : emit "ok|bad<TAB>app|db<TAB>detail" per DRBD minor (10=app,11=db).
 _parse_drbd() {
@@ -182,6 +237,18 @@ cmd_status() {
     out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
   done <<< "$(_parse_pcs "$pcs_raw")"
 
+  # Nodes: active = where npm_vip is Started (from the same pcs_raw).
+  local active nodes_raw color
+  active="$(printf '%s\n' "$pcs_raw" | grep -F 'npm_vip' | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+  nodes_raw="$(ansible "${active:-$(_node1)}" -b -o -m shell -a 'pcs status nodes' 2>/dev/null | sed 's/\\n/\n/g')"
+  out+=( 'Nodes' )
+  while IFS=$'\t' read -r st detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    case "$st" in ok) color="$C_GREEN" ;; bad) color="$C_RED" ;; *) color='' ;; esac
+    out+=( "  ${color}${detail}${C_RESET}" )
+  done <<< "$(_parse_nodes "$nodes_raw" "$active")"
+
   out+=( "VIP ${vip}:${port}" )
   if [[ "$http" == 2* || "$http" == 3* ]]; then out+=( "$(_row ok "$(printf '%-11s' HTTP)" "$http")" )
   else out+=( "$(_row bad "$(printf '%-11s' HTTP)" "$http")" ); bad=$((bad+1)); fi
@@ -191,6 +258,45 @@ cmd_status() {
 
   ui_box 'Cluster Health' "${out[@]}"
   (( bad == 0 ))
+}
+
+# cmd_maintenance [end] <node> [--yes] [--force] : drain a node via pacemaker
+# standby (or unstandby with 'end'). No node -> show roles.
+cmd_maintenance() {
+  if [[ "${1:-}" == "end" ]]; then
+    shift; local full; full="$(_node_full "${1:-}")" || die "maintenance end: unknown node '${1:-}'"
+    run_step "unstandby $(_node_short "$full")" ansible "$full" -b -m shell -a "pcs node unstandby $full"
+    info "maintenance ended for $(_node_short "$full"). DRBD will resync if needed."
+    return 0
+  fi
+  if [[ -z "${1:-}" || "${1:0:2}" == "--" ]]; then cmd_status; return $?; fi
+
+  local full force=0 yes=0 arg
+  full="$(_node_full "$1")" || die "maintenance: unknown node '$1' (use PROD-01 / PROD-02)"
+  shift
+  for arg in "$@"; do case "$arg" in --force) force=1;; --yes) yes=1;; *) die "maintenance: unknown flag $arg";; esac; done
+
+  local n1 n2 peer; n1="$(_node1)"; n2="$(_node2)"; n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  [[ "$full" == "$n1" ]] && peer="$n2" || peer="$n1"
+
+  if [[ "$DRY_RUN" != "1" && "$force" != "1" ]]; then
+    local drbd_raw nodes_raw
+    drbd_raw="$(ansible ha_nodes -b -o -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd' 2>/dev/null)"
+    nodes_raw="$(ansible "$peer" -b -o -m shell -a 'pcs status nodes' 2>/dev/null | sed 's/\\n/\n/g')"
+    _maint_precheck "$drbd_raw" "$nodes_raw" "$full" \
+      || die "refusing to drain $(_node_short "$full") — peer not ready (override with --force)"
+  fi
+
+  if [[ "$DRY_RUN" != "1" ]]; then
+    local active; active="$(ansible "$peer" -b -o -m shell -a 'pcs status --full | grep npm_vip' 2>/dev/null | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+    if [[ "$full" == "$active" ]]; then
+      [[ "$yes" == "1" ]] && FORCE_YES=1 || FORCE_YES=0
+      confirm_or_die "Draining ACTIVE node $(_node_short "$full") moves the VIP to $(_node_short "$peer") (brief blip). Continue?"
+    fi
+  fi
+
+  run_step "standby $(_node_short "$full")" ansible "$peer" -b -m shell -a "pcs node standby $full"
+  info "$(_node_short "$full") draining to $(_node_short "$peer"). Run 'npmctl maintenance end $(_node_short "$full")' when done."
 }
 
 cmd_logs() {
@@ -249,7 +355,8 @@ dispatch() {
     update)  cmd_update "$@" ;;
     cert)    cmd_cert "$@" ;;
     deploy)  cmd_deploy "$@" ;;
-    status)     cmd_status "$@" ;;
+    status)      cmd_status "$@" ;;
+    maintenance) cmd_maintenance "$@" ;;
     logs)       cmd_logs "$@" ;;
     vault-edit) cmd_vault_edit "$@" ;;
     *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
@@ -337,10 +444,10 @@ interactive_menu() {
     clear 2>/dev/null || true
     ui_banner
     items=( '--Operate' deploy drift '--Inspect' status logs
-            '--Maintain' backup verify restore update cert vault-edit quit )
+            '--Maintain' maintenance backup verify restore update cert vault-edit quit )
     UI_DESC=( '' 'safe converge (gate→backup→verify)' 'check repo vs live config'
               '' 'cluster / DRBD / VIP health' 'tail NPM container logs'
-              '' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
+              '' 'drain a node (standby)' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
               'rolling image update' 'issue/renew TLS' 'edit secrets' 'exit' )
     choice="$(ui_menu 'Choose an action:' "${items[@]}")"
     [[ "$choice" == "quit" ]] && break
