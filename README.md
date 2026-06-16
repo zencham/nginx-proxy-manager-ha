@@ -30,6 +30,20 @@ anything is unhealthy — usable directly as a monitoring check. Long playbook
 commands show a live spinner that resolves to `✓ label (Ns)` or `✗ label (rc N)`.
 Set `NPMCTL_ASCII=1` for terminals without box-drawing glyphs.
 
+The status panel also shows a **Nodes** section marking which node is ACTIVE
+(holds the VIP, NPM service, and DRBD Primary) vs passive. To work on a node,
+drain it to its peer with pacemaker standby:
+
+```bash
+./npmctl maintenance PROD-01        # standby PROD-01 → services move to PROD-02
+# ... maintain / reboot PROD-01 ...
+./npmctl maintenance end PROD-01    # unstandby → back in service, DRBD resyncs
+```
+
+`maintenance` refuses to drain if the peer is not Online or DRBD is not UpToDate on
+both nodes (override with `--force`); draining the ACTIVE node prompts first
+(`--yes` to skip). Standby is permanent until `end`, so it survives a reboot.
+
 ## Architecture
 
 | Component | Detail |
