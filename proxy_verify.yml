@@ -1,0 +1,8 @@
+---
+- name: Verify (and optionally restore) NPM reverse-proxy configuration
+  hosts: controller
+  gather_facts: false
+  roles:
+    - role: proxy_guard
+  # Default run = verify only. `--tags restore` runs the restore path.
+  tags: verify

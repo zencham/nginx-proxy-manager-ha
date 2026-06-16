@@ -1,1 +1,51 @@
 ---
+- name: Fail if no snapshot exists yet
+  ansible.builtin.stat:
+    path: "{{ proxy_guard_backup_dir }}/npm-latest.json"
+  register: _pg_latest_stat
+
+- name: Assert a snapshot is present
+  ansible.builtin.assert:
+    that: _pg_latest_stat.stat.exists
+    fail_msg: "No snapshot found. Run: ansible-playbook proxy_backup.yml"
+
+- name: Load latest snapshot
+  ansible.builtin.set_fact:
+    _pg_snapshot: "{{ lookup('file', proxy_guard_backup_dir + '/npm-latest.json') | from_json }}"
+
+- name: Fetch current live proxy hosts
+  ansible.builtin.uri:
+    url: "{{ npm_api_base_url }}/api/nginx/proxy-hosts"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    status_code: 200
+  register: _pg_live
+
+- name: Set inputs for compute_missing
+  ansible.builtin.set_fact:
+    _pg_snapshot_hosts: "{{ _pg_snapshot['proxy-hosts'] }}"
+    _pg_live_hosts: "{{ _pg_live.json }}"
+
+- name: Compute missing proxy hosts
+  ansible.builtin.include_tasks: compute_missing.yml
+
+- name: Assert no proxy hosts were lost
+  ansible.builtin.assert:
+    that:
+      - proxy_guard_missing | length == 0
+    fail_msg: >-
+      VERIFY FAILED: {{ proxy_guard_missing | length }} proxy host(s) missing:
+      {% for h in proxy_guard_missing %}
+        - {{ h.domain_names | join(', ') }}{% endfor %}
+
+      To restore: ansible-playbook proxy_verify.yml --tags restore
+    success_msg: "VERIFY OK: all {{ _pg_snapshot_hosts | length }} snapshot proxy hosts present and enabled"
+
+- name: Live HTTP check through the VIP (optional)
+  ansible.builtin.uri:
+    url: "https://{{ proxy_guard_sample_domain }}"
+    method: GET
+    validate_certs: false
+    status_code: [200, 201, 204, 301, 302, 307, 308, 401, 403]
+  when: proxy_guard_sample_domain | length > 0
