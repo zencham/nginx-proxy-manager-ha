@@ -22,7 +22,11 @@ drbd_backing_dev_app: /dev/sdb1
 drbd_backing_dev_db:  /dev/sdb2
 
 # DRBD resource names (used by pcs and drbdadm — must be stable after first deploy)
-drbd_resource_app: mib_npm_ha_drbd_app
+# NOTE: drbd_resource_app MUST stay mib_npm_ha_drbd_npm — this is the name the
+# live MIBTECH cluster was deployed with (pacemaker drbd_app + on-disk DRBD
+# metadata reference it). A 2026-06-16 rename to _app re-rendered npm-ha.res with
+# a name pacemaker could not find, stopping the cluster. Do not rename post-deploy.
+drbd_resource_app: mib_npm_ha_drbd_npm
 drbd_resource_db:  mib_npm_ha_drbd_db
 
 # NPM application paths (shared across npm_ha and npm_update roles)
