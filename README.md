@@ -223,6 +223,25 @@ to run against production; `proxy_restore.yml` is the only path that writes to N
 Set `proxy_guard_sample_domain` (role default) to a real domain to also probe a
 live site through the VIP during verify.
 
+## Drift Check — verify repo matches live before deploying
+
+`drift_check.yml` renders every config file the `npm_ha` role manages with the
+current repo variables and diffs each against the live node file, printing the
+diffs and exiting non-zero if anything drifts. Run it before `main.yml` to catch
+repo↔live divergence (the cause of the 2026-06-16 outage) before a converge acts
+on it.
+
+```bash
+ansible-playbook drift_check.yml     # read-only; fails on drift
+# if it reports drift: review the diffs, reconcile repo or live, re-run
+ansible-playbook main.yml            # only once drift_check is clean
+```
+
+It checks: `/etc/drbd.d/npm-ha.res`, `docker-compose.yml`, the
+`npm-stack.service` systemd unit, `/etc/hosts` node entries, and the corosync
+cluster name. The check is entirely `check_mode` (read-only) and safe to run
+against production. It does not modify `main.yml`.
+
 ## Future Considerations
 
 - **Docker CE migration**: both nodes currently run `docker.io` (the Debian
