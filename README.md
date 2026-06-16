@@ -24,6 +24,12 @@ with no arguments for an interactive menu, or pass a command directly:
 `--force`) and always snapshots proxy hosts first; pass `--yes` to skip the
 confirmation prompt in automation.
 
+`./npmctl status` renders a parsed health panel (✓/✗ for DRBD app/db, the
+Pacemaker VIP and service, and the VIP's HTTP response) and exits non-zero if
+anything is unhealthy — usable directly as a monitoring check. Long playbook
+commands show a live spinner that resolves to `✓ label (Ns)` or `✗ label (rc N)`.
+Set `NPMCTL_ASCII=1` for terminals without box-drawing glyphs.
+
 ## Architecture
 
 | Component | Detail |
