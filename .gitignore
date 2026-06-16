@@ -3,3 +3,6 @@
 
 # Vault password file — never commit this
 .vault_pass
+
+# NPM proxy-config snapshots — live data, not source
+backups/

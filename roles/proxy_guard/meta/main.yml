@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: MIBTECH
+  description: Snapshot, verify, and restore NPM reverse-proxy config via the NPM API
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []
