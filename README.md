@@ -4,6 +4,26 @@
 Deployed as Debian Trixie VMs. DRBD Protocol C provides synchronous replication and
 split-brain data protection without requiring external STONITH.
 
+## Managing the cluster: `npmctl`
+
+`./npmctl` is a self-contained management CLI (zero extra dependencies). Run it
+with no arguments for an interactive menu, or pass a command directly:
+
+```bash
+./npmctl              # interactive menu
+./npmctl status       # cluster / DRBD / VIP health
+./npmctl deploy       # SAFE converge: drift-check + backup, then main.yml, then verify
+./npmctl drift        # config drift check
+./npmctl backup|verify|restore   # proxy-host snapshot / verify / restore
+./npmctl update|cert  # rolling image update / TLS certs
+./npmctl logs         # tail NPM container logs
+./npmctl vault-edit ha_nodes     # edit secrets
+```
+
+`deploy` refuses to converge if `drift` detects repo↔live drift (override with
+`--force`) and always snapshots proxy hosts first; pass `--yes` to skip the
+confirmation prompt in automation.
+
 ## Architecture
 
 | Component | Detail |
