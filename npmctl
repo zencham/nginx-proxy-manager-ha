@@ -161,11 +161,37 @@ _restore_term() {
 }
 trap _restore_term EXIT INT
 
-ui_banner() {
-  printf '%s╭─ NPM HA ─ MIBTECH ──────────────╮%s\n' "$C_CYN" "$C_RESET"
-  printf '%s│%s  npmctl — cluster management    %s│%s\n' "$C_CYN" "$C_RESET" "$C_CYN" "$C_RESET"
-  printf '%s╰─────────────────────────────────╯%s\n' "$C_CYN" "$C_RESET"
+# _vlen <text> : visible character width (strips ANSI; counts code points, correct
+# for non-wide glyphs in a UTF-8 locale) so colored/Unicode content aligns.
+_vlen() {
+  local esc s
+  esc="$(printf '\033')"
+  s="$(printf '%s' "$1" | sed "s/${esc}\[[0-9;]*m//g")"
+  printf '%s' "${#s}"
 }
+
+# ui_box <title> <line>... : rounded box sized to the widest visible line.
+# NPMCTL_ASCII=1 falls back to ASCII corners for terminals without box glyphs.
+ui_box() {
+  local title="$1"; shift
+  local lines=("$@") w i len
+  w="$(_vlen "$title")"
+  for i in "${lines[@]}"; do len="$(_vlen "$i")"; (( len > w )) && w=$len; done
+  (( w += 2 ))
+  local tl='╭' tr='╮' bl='╰' br='╯' h='─' v='│'
+  if [[ -n "${NPMCTL_ASCII:-}" ]]; then tl='+'; tr='+'; bl='+'; br='+'; h='-'; v='|'; fi
+  local topfill bar pad n
+  topfill=''; for (( n = w - ${#title} - 3; n > 0; n-- )); do topfill+="$h"; done
+  bar='';     for (( n = w; n > 0; n-- )); do bar+="$h"; done
+  printf '%s%s%s %s %s%s%s\n' "$C_CYN" "$tl" "$h" "$title" "$topfill" "$tr" "$C_RESET"
+  for i in "${lines[@]}"; do
+    pad=$(( w - 2 - $(_vlen "$i") )); (( pad < 0 )) && pad=0
+    printf '%s%s%s %s%*s %s%s%s\n' "$C_CYN" "$v" "$C_RESET" "$i" "$pad" '' "$C_CYN" "$v" "$C_RESET"
+  done
+  printf '%s%s%s%s%s\n' "$C_CYN" "$bl" "$bar" "$br" "$C_RESET"
+}
+
+ui_banner() { ui_box 'NPM HA · MIBTECH' 'npmctl — cluster management'; }
 
 # ui_menu <prompt> <item1> <item2> ... : arrow-key + number select; echoes chosen item.
 # ui_menu <prompt> <item1> ... : draws to /dev/tty and reads keys from /dev/tty so
@@ -228,4 +254,8 @@ main() {
   fi
 }
 
-main "$@"
+# Run main only when executed directly; when sourced (tests access functions in
+# isolation) skip it so sourcing has no side effects.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
