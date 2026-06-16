@@ -1,0 +1,7 @@
+{
+  "captured_at": "{{ ansible_date_time.iso8601 }}",
+  "npm_api_base_url": "{{ npm_api_base_url }}",
+{% for type in proxy_guard_capture %}
+  "{{ type }}": {{ _pg_results[type] | to_json }}{{ "," if not loop.last else "" }}
+{% endfor %}
+}

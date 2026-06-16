@@ -1,1 +1,51 @@
 ---
+- name: Gather facts for timestamp
+  ansible.builtin.setup:
+    gather_subset: ["min"]
+
+- name: Fetch each NPM resource type
+  ansible.builtin.uri:
+    url: "{{ npm_api_base_url }}/api/nginx/{{ item }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    status_code: 200
+  loop: "{{ proxy_guard_capture }}"
+  register: _pg_fetch
+
+- name: Assemble results map keyed by resource type
+  ansible.builtin.set_fact:
+    _pg_results: "{{ dict(proxy_guard_capture | zip(_pg_fetch.results | map(attribute='json') | list)) }}"
+
+- name: Guard against an empty proxy-hosts snapshot clobbering a good one
+  ansible.builtin.assert:
+    that:
+      - _pg_results['proxy-hosts'] | length > 0
+    fail_msg: "Refusing to write snapshot: NPM returned zero proxy-hosts (transient API issue?)"
+    success_msg: "{{ _pg_results['proxy-hosts'] | length }} proxy-hosts fetched"
+
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ proxy_guard_backup_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Write timestamped snapshot
+  ansible.builtin.template:
+    src: snapshot.json.j2
+    dest: "{{ proxy_guard_backup_dir }}/npm-{{ ansible_date_time.iso8601_basic_short }}.json"
+    mode: "0600"
+  register: _pg_snapshot_file
+
+- name: Update latest snapshot pointer
+  ansible.builtin.copy:
+    src: "{{ _pg_snapshot_file.dest }}"
+    dest: "{{ proxy_guard_backup_dir }}/npm-latest.json"
+    mode: "0600"
+    remote_src: true
+
+- name: Report snapshot contents
+  ansible.builtin.debug:
+    msg: >-
+      Snapshot written to {{ _pg_snapshot_file.dest }} —
+      {% for type in proxy_guard_capture %}{{ type }}={{ _pg_results[type] | length }}{{ " " if not loop.last else "" }}{% endfor %}
