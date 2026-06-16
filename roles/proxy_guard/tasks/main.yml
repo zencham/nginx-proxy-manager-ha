@@ -1,0 +1,16 @@
+---
+- name: Authenticate to NPM API
+  ansible.builtin.import_tasks: auth.yml
+  tags: [backup, verify, restore]
+
+- name: Snapshot NPM proxy configuration
+  ansible.builtin.import_tasks: backup.yml
+  tags: backup
+
+- name: Verify proxy hosts survived
+  ansible.builtin.import_tasks: verify.yml
+  tags: verify
+
+- name: Restore missing proxy hosts from snapshot
+  ansible.builtin.import_tasks: restore.yml
+  tags: restore
