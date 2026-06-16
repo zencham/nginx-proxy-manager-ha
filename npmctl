@@ -70,6 +70,7 @@ Commands:
   update        Rolling NPM image update
   cert          Issue/renew TLS certificates
   status        Show cluster / DRBD / VIP health
+  maintenance   Drain a node for maintenance (standby) / end <node>
   logs          Tail NPM container logs
   vault-edit    Edit an encrypted vault (ha_nodes|controller)
   help          Show this help
@@ -259,6 +260,45 @@ cmd_status() {
   (( bad == 0 ))
 }
 
+# cmd_maintenance [end] <node> [--yes] [--force] : drain a node via pacemaker
+# standby (or unstandby with 'end'). No node -> show roles.
+cmd_maintenance() {
+  if [[ "${1:-}" == "end" ]]; then
+    shift; local full; full="$(_node_full "${1:-}")" || die "maintenance end: unknown node '${1:-}'"
+    run_step "unstandby $(_node_short "$full")" ansible "$full" -b -m shell -a "pcs node unstandby $full"
+    info "maintenance ended for $(_node_short "$full"). DRBD will resync if needed."
+    return 0
+  fi
+  if [[ -z "${1:-}" || "${1:0:2}" == "--" ]]; then cmd_status; return $?; fi
+
+  local full force=0 yes=0 arg
+  full="$(_node_full "$1")" || die "maintenance: unknown node '$1' (use PROD-01 / PROD-02)"
+  shift
+  for arg in "$@"; do case "$arg" in --force) force=1;; --yes) yes=1;; *) die "maintenance: unknown flag $arg";; esac; done
+
+  local n1 n2 peer; n1="$(_node1)"; n2="$(_node2)"; n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  [[ "$full" == "$n1" ]] && peer="$n2" || peer="$n1"
+
+  if [[ "$DRY_RUN" != "1" && "$force" != "1" ]]; then
+    local drbd_raw nodes_raw
+    drbd_raw="$(ansible ha_nodes -b -o -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd' 2>/dev/null)"
+    nodes_raw="$(ansible "$peer" -b -o -m shell -a 'pcs status nodes' 2>/dev/null | sed 's/\\n/\n/g')"
+    _maint_precheck "$drbd_raw" "$nodes_raw" "$full" \
+      || die "refusing to drain $(_node_short "$full") — peer not ready (override with --force)"
+  fi
+
+  if [[ "$DRY_RUN" != "1" ]]; then
+    local active; active="$(ansible "$peer" -b -o -m shell -a 'pcs status --full | grep npm_vip' 2>/dev/null | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+    if [[ "$full" == "$active" ]]; then
+      [[ "$yes" == "1" ]] && FORCE_YES=1 || FORCE_YES=0
+      confirm_or_die "Draining ACTIVE node $(_node_short "$full") moves the VIP to $(_node_short "$peer") (brief blip). Continue?"
+    fi
+  fi
+
+  run_step "standby $(_node_short "$full")" ansible "$peer" -b -m shell -a "pcs node standby $full"
+  info "$(_node_short "$full") draining to $(_node_short "$peer"). Run 'npmctl maintenance end $(_node_short "$full")' when done."
+}
+
 cmd_logs() {
   local n="${1:-50}"
   run ansible ha_nodes -b -m shell -a "docker compose -f /opt/npm/compose/docker-compose.yml logs --tail=${n} 2>/dev/null || true"
@@ -315,7 +355,8 @@ dispatch() {
     update)  cmd_update "$@" ;;
     cert)    cmd_cert "$@" ;;
     deploy)  cmd_deploy "$@" ;;
-    status)     cmd_status "$@" ;;
+    status)      cmd_status "$@" ;;
+    maintenance) cmd_maintenance "$@" ;;
     logs)       cmd_logs "$@" ;;
     vault-edit) cmd_vault_edit "$@" ;;
     *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
@@ -403,10 +444,10 @@ interactive_menu() {
     clear 2>/dev/null || true
     ui_banner
     items=( '--Operate' deploy drift '--Inspect' status logs
-            '--Maintain' backup verify restore update cert vault-edit quit )
+            '--Maintain' maintenance backup verify restore update cert vault-edit quit )
     UI_DESC=( '' 'safe converge (gate→backup→verify)' 'check repo vs live config'
               '' 'cluster / DRBD / VIP health' 'tail NPM container logs'
-              '' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
+              '' 'drain a node (standby)' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
               'rolling image update' 'issue/renew TLS' 'edit secrets' 'exit' )
     choice="$(ui_menu 'Choose an action:' "${items[@]}")"
     [[ "$choice" == "quit" ]] && break

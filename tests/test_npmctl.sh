@@ -151,5 +151,15 @@ nodes_peer_sb="Online: MIBTECH-NPM-PROD-01
 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _maint_precheck "$1" "$2" "$3"' _ "$drbd_ok2" "$nodes_peer_sb" "MIBTECH-NPM-PROD-01" >/dev/null 2>&1
 check_rc "precheck fails when peer already standby" 1 "$?"
 
+echo "== Task M4: maintenance command =="
+out="$(NPMCTL_DRY_RUN=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; cmd_maintenance PROD-02 --yes --force' 2>/dev/null)"
+check "maintenance standby cmd" "pcs node standby MIBTECH-NPM-PROD-02" "$out"
+out="$(NPMCTL_DRY_RUN=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; cmd_maintenance end PROD-02' 2>/dev/null)"
+check "maintenance end unstandby cmd" "pcs node unstandby MIBTECH-NPM-PROD-02" "$out"
+NPMCTL_DRY_RUN=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; cmd_maintenance BOGUS' >/dev/null 2>&1
+check_rc "maintenance rejects bogus node" 1 "$?"
+out="$(NPMCTL_DRY_RUN=1 ./npmctl help 2>&1)"
+check "help lists maintenance" "maintenance" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
