@@ -1,0 +1,14 @@
+---
+- name: Snapshot NPM reverse-proxy configuration
+  hosts: controller
+  gather_facts: false
+  tasks:
+    - name: Authenticate to NPM API
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: auth.yml
+
+    - name: Snapshot NPM proxy configuration
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: backup.yml

@@ -1,0 +1,14 @@
+---
+- name: Verify NPM reverse-proxy configuration survived re-converge
+  hosts: controller
+  gather_facts: false
+  tasks:
+    - name: Authenticate to NPM API
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: auth.yml
+
+    - name: Verify proxy hosts are all present
+      ansible.builtin.import_role:
+        name: proxy_guard
+        tasks_from: verify.yml

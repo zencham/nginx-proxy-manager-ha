@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-06-16T12:00:00Z",
+  "proxy-hosts": [
+    {"id": 14, "domain_names": ["app.mibtech.ma"], "enabled": 1},
+    {"id": 22, "domain_names": ["portal.visionhis.ma"], "enabled": 1},
+    {"id": 31, "domain_names": ["api.myakdital.ma", "api2.myakdital.ma"], "enabled": 1}
+  ]
+}

@@ -1,0 +1,14 @@
+---
+# proxy_guard deliberately has NO combined default entrypoint. Each operation is
+# a separate playbook so that running one can never trigger another — in
+# particular, verify must never re-snapshot (which would overwrite the
+# pre-converge baseline) or restore. Use one of:
+#   proxy_backup.yml   — snapshot live config to backups/npm-latest.json
+#   proxy_verify.yml   — assert no proxy host was lost vs the snapshot
+#   proxy_restore.yml  — re-create missing proxy hosts from the snapshot
+# These playbooks import the specific task file they need via tasks_from.
+- name: Refuse to run proxy_guard as a bare role
+  ansible.builtin.fail:
+    msg: >-
+      proxy_guard has no default entrypoint. Run proxy_backup.yml,
+      proxy_verify.yml, or proxy_restore.yml instead.

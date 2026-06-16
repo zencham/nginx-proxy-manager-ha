@@ -1,0 +1,17 @@
+---
+- name: Authenticate to NPM API
+  ansible.builtin.uri:
+    url: "{{ npm_api_base_url }}/api/tokens"
+    method: POST
+    body_format: json
+    body:
+      identity: "{{ npm_admin_email }}"
+      secret: "{{ npm_admin_password }}"
+    status_code: 200
+  register: npm_auth
+  no_log: true
+
+- name: Set NPM token fact
+  ansible.builtin.set_fact:
+    npm_token: "{{ npm_auth.json.token }}"
+  no_log: true

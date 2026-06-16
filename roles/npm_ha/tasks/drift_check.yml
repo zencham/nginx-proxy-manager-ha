@@ -1,0 +1,75 @@
+---
+# Read-only drift detection: render each npm_ha-managed config with current repo
+# vars and diff against the live node file. check_mode guarantees no writes;
+# diff:true prints the unified diff of what WOULD change. A final assert fails,
+# listing every drifted file. Run via drift_check.yml before main.yml.
+
+- name: Drift check — DRBD resource config
+  ansible.builtin.template:
+    src: npm-ha.res.j2
+    dest: /etc/drbd.d/npm-ha.res
+    owner: root
+    group: root
+    mode: '0600'
+  check_mode: true
+  diff: true
+  register: drift_res
+
+- name: Drift check — docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ npm_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: '0600'
+  check_mode: true
+  diff: true
+  register: drift_compose
+
+- name: Drift check — systemd unit
+  ansible.builtin.template:
+    src: npm-stack.service.j2
+    dest: /etc/systemd/system/npm-stack.service
+    owner: root
+    group: root
+    mode: '0644'
+  check_mode: true
+  diff: true
+  register: drift_unit
+
+- name: Drift check — /etc/hosts node entries
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.hostname }}"
+    regexp: "^[0-9.]+\\s+{{ item.hostname }}(\\s.*)?$"
+    state: present
+  check_mode: true
+  diff: true
+  loop:
+    - { ip: "{{ node1_address }}", hostname: "{{ node1_name }}" }
+    - { ip: "{{ node2_address }}", hostname: "{{ node2_name }}" }
+  register: drift_hosts
+
+- name: Drift check — corosync cluster name present
+  ansible.builtin.command: grep -q "{{ pacemaker_cluster_name }}" /etc/corosync/corosync.conf
+  register: drift_corosync
+  changed_when: false
+  failed_when: false
+
+- name: Collect drifted items
+  ansible.builtin.set_fact:
+    drift_check_drifted: >-
+      {{ (['/etc/drbd.d/npm-ha.res'] if drift_res.changed else [])
+       + ([npm_compose_dir ~ '/docker-compose.yml'] if drift_compose.changed else [])
+       + (['/etc/systemd/system/npm-stack.service'] if drift_unit.changed else [])
+       + (['/etc/hosts'] if (drift_hosts.results | selectattr('changed') | list | length > 0) else [])
+       + (['corosync:' ~ pacemaker_cluster_name] if drift_corosync.rc != 0 else []) }}
+
+- name: Assert no drift
+  ansible.builtin.assert:
+    that: drift_check_drifted | length == 0
+    fail_msg: >-
+      DRIFT DETECTED on {{ inventory_hostname }} in {{ drift_check_drifted | length }} item(s):
+      {{ drift_check_drifted | join(', ') }}.
+      Review the diffs above and reconcile repo vs live before running main.yml.
+    success_msg: "No drift on {{ inventory_hostname }}: all managed npm_ha config matches the repo."

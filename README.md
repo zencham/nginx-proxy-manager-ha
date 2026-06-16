@@ -194,6 +194,54 @@ acme_server: "letsencrypt_test"
 
 Issue against staging, verify the cert upload flow, then switch back to `letsencrypt` and re-run to issue the production cert.
 
+## Proxy Guard — safe re-converge of the live cluster
+
+`proxy_guard` snapshots the NPM reverse-proxy configuration so `main.yml` can be
+re-run against the already-deployed cluster to prove idempotency without risking
+the live proxy hosts.
+
+Procedure:
+
+```bash
+ansible-playbook proxy_backup.yml      # snapshot proxies -> backups/npm-latest.json
+ansible-playbook main.yml              # re-converge (DRBD/cluster/resource steps skip)
+ansible-playbook proxy_verify.yml      # assert nothing was lost
+```
+
+If verify reports missing hosts, restore them from the snapshot:
+
+```bash
+ansible-playbook proxy_restore.yml
+```
+
+Each operation is a separate playbook on purpose: running one can never trigger
+another, so `proxy_verify.yml` can never re-snapshot over the pre-converge
+baseline. Snapshots are written to `backups/` (gitignored — they contain live
+domain config). `proxy_backup.yml` and `proxy_verify.yml` are GET-only and safe
+to run against production; `proxy_restore.yml` is the only path that writes to NPM.
+
+Set `proxy_guard_sample_domain` (role default) to a real domain to also probe a
+live site through the VIP during verify.
+
+## Drift Check — verify repo matches live before deploying
+
+`drift_check.yml` renders every config file the `npm_ha` role manages with the
+current repo variables and diffs each against the live node file, printing the
+diffs and exiting non-zero if anything drifts. Run it before `main.yml` to catch
+repo↔live divergence (the cause of the 2026-06-16 outage) before a converge acts
+on it.
+
+```bash
+ansible-playbook drift_check.yml     # read-only; fails on drift
+# if it reports drift: review the diffs, reconcile repo or live, re-run
+ansible-playbook main.yml            # only once drift_check is clean
+```
+
+It checks: `/etc/drbd.d/npm-ha.res`, `docker-compose.yml`, the
+`npm-stack.service` systemd unit, `/etc/hosts` node entries, and the corosync
+cluster name. The check is entirely `check_mode` (read-only) and safe to run
+against production. It does not modify `main.yml`.
+
 ## Future Considerations
 
 - **Docker CE migration**: both nodes currently run `docker.io` (the Debian

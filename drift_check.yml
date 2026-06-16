@@ -1,0 +1,10 @@
+---
+- name: Detect drift between repo config and the live NPM HA nodes
+  hosts: ha_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Run npm_ha drift checks
+      ansible.builtin.import_role:
+        name: npm_ha
+        tasks_from: drift_check.yml

@@ -1,0 +1,16 @@
+---
+# Where snapshots are written on the controller.
+proxy_guard_backup_dir: "{{ playbook_dir }}/backups"
+
+# NPM API resource types captured in each snapshot.
+proxy_guard_capture:
+  - proxy-hosts
+  - redirection-hosts
+  - dead-hosts
+  - streams
+  - access-lists
+  - certificates
+
+# Optional end-to-end check in verify: a domain expected to return 2xx/3xx
+# through the VIP. Empty string disables the live-HTTP check.
+proxy_guard_sample_domain: ""

@@ -1,0 +1,27 @@
+---
+# Pure logic: given _pg_snapshot_hosts and _pg_live_hosts (lists of NPM
+# proxy-host objects), set proxy_guard_missing to the snapshot hosts whose
+# sorted domain_names set is not present AND enabled in the live list.
+# Identity = sorted(domain_names), because NPM ids are not stable across restore.
+- name: Build signatures of enabled live proxy hosts
+  ansible.builtin.set_fact:
+    _pg_live_signatures: >-
+      {{ _pg_live_hosts
+         | selectattr('enabled', 'in', [1, true])
+         | map(attribute='domain_names')
+         | map('sort') | map('join', ',')
+         | list }}
+
+- name: Initialize missing list
+  ansible.builtin.set_fact:
+    proxy_guard_missing: []
+
+- name: Collect snapshot hosts absent from enabled live signatures
+  ansible.builtin.set_fact:
+    proxy_guard_missing: "{{ proxy_guard_missing + [item] }}"
+  loop: "{{ _pg_snapshot_hosts }}"
+  loop_control:
+    label: "{{ item.domain_names | default([]) | join(',') }}"
+  when:
+    - item.domain_names is defined
+    - (item.domain_names | sort | join(',')) not in _pg_live_signatures
