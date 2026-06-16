@@ -49,6 +49,54 @@ cmd_restore() { run ansible-playbook proxy_restore.yml "$@"; }
 cmd_update()  { run ansible-playbook npm_update.yml "$@"; }
 cmd_cert()    { run ansible-playbook cert_manager.yml "$@"; }
 
+# confirm_or_die <message> : interactive yes/no. Honors --yes (FORCE_YES) and dry-run.
+FORCE_YES=0
+confirm_or_die() {
+  local msg="$1"
+  if [[ "$FORCE_YES" == "1" ]]; then
+    [[ "$DRY_RUN" == "1" ]] && printf 'confirm-skipped: %s\n' "$msg"
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'would-confirm: %s\n' "$msg"; return 0
+  fi
+  local ans
+  read -r -p "$msg [y/N] " ans
+  [[ "$ans" == "y" || "$ans" == "Y" ]] || die "aborted by operator"
+}
+
+cmd_main() { run ansible-playbook main.yml "$@"; }
+
+cmd_deploy() {
+  local force=0
+  FORCE_YES=0
+  for arg in "$@"; do
+    case "$arg" in
+      --force) force=1 ;;
+      --yes)   FORCE_YES=1 ;;
+      *) die "deploy: unknown flag $arg" ;;
+    esac
+  done
+
+  info "[1/5] drift check"
+  if [[ "$force" == "1" ]]; then info "drift gate bypassed (--force)"; fi
+  if ! cmd_drift && [[ "$force" != "1" ]]; then
+    die "drift detected — reconcile repo vs live, or re-run with --force"
+  fi
+
+  info "[2/5] snapshot proxy hosts"
+  cmd_backup
+
+  info "[3/5] confirm"
+  confirm_or_die "About to converge PRODUCTION (main.yml). Continue?"
+
+  info "[4/5] converge"
+  cmd_main
+
+  info "[5/5] verify proxy hosts survived"
+  cmd_verify
+}
+
 # --- dispatch ---
 dispatch() {
   local cmd="${1:-}"; shift || true
@@ -60,6 +108,7 @@ dispatch() {
     restore) cmd_restore "$@" ;;
     update)  cmd_update "$@" ;;
     cert)    cmd_cert "$@" ;;
+    deploy)  cmd_deploy "$@" ;;
     *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
   esac
 }

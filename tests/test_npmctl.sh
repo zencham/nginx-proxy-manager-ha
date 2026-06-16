@@ -32,5 +32,19 @@ for pair in "drift:drift_check.yml" "backup:proxy_backup.yml" "verify:proxy_veri
   check "$c runs $pb" "would-run: ansible-playbook $pb" "$out"
 done
 
+echo "== Task 3: deploy gate =="
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL deploy 2>&1)"
+check "deploy step1 drift"   "would-run: ansible-playbook drift_check.yml" "$out"
+check "deploy step2 backup"  "would-run: ansible-playbook proxy_backup.yml" "$out"
+check "deploy step3 confirm" "would-confirm:" "$out"
+check "deploy step4 main"    "would-run: ansible-playbook main.yml" "$out"
+check "deploy step5 verify"  "would-run: ansible-playbook proxy_verify.yml" "$out"
+order="$(printf '%s\n' "$out" | grep -nE 'drift_check.yml|proxy_backup.yml|main.yml|proxy_verify.yml' | cut -d: -f1 | tr '\n' ' ')"
+check "deploy ordering is sorted" "$(printf '%s' "$order" | tr ' ' '\n' | sort -n | tr '\n' ' ')" "$order"
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL deploy --force 2>&1)"
+check "deploy --force notes bypass" "drift gate bypassed" "$out"
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL deploy --yes 2>&1)"
+check "deploy --yes skips confirm" "confirm-skipped" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
