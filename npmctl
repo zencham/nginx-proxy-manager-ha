@@ -116,14 +116,55 @@ _parse_pcs() {
   fi
 }
 
+# _row <ok|bad|''> <label> <detail> : indented "✓ label  detail" / "✗ …" for a
+# check, or a plain group heading when status is empty. Color via palette.
+_row() {
+  local st="$1" label="$2" detail="$3"
+  case "$st" in
+    ok)  printf '  %s✓%s %s%s' "$C_GREEN" "$C_RESET" "$label" "${detail:+ $detail}" ;;
+    bad) printf '  %s✗%s %s%s' "$C_RED"   "$C_RESET" "$label" "${detail:+ $detail}" ;;
+    *)   printf '%s' "$label" ;;
+  esac
+}
+
 cmd_status() {
   local vip port; vip="$(_vip)"; vip="${vip:-192.168.206.220}"; port="$(_port)"; port="${port:-15625}"
-  info "DRBD:"
-  run ansible ha_nodes -b -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd'
-  info "Pacemaker:"
-  run ansible ha_nodes -b -m shell -a 'pcs status --full | grep -E "npm_service|npm_vip|Failed Resource" || true'
-  info "VIP ${vip}:${port}:"
-  run curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 8 "http://${vip}:${port}/"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    run ansible ha_nodes -b -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd'
+    return 0
+  fi
+  local drbd_raw pcs_raw http out=() bad=0 st label detail
+  # Tight per-resource signature (cs:WORD ro:W/W ds:W/W); keep one row per minor
+  # (app=10, db=11). awk '!seen[$1]++' takes the first occurrence across both nodes.
+  drbd_raw="$(ansible ha_nodes -b -o -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd' 2>/dev/null \
+              | grep -oE '1[01]: cs:[A-Za-z]+ ro:[A-Za-z]+/[A-Za-z]+ ds:[A-Za-z]+/[A-Za-z]+' \
+              | awk '!seen[$1]++')"
+  pcs_raw="$(ansible ha_nodes -b -o -m shell -a 'pcs status --full | grep -E "npm_service|npm_vip|Failed Resource"' 2>/dev/null)"
+  http="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://${vip}:${port}/" 2>/dev/null || echo 000)"
+
+  out+=( 'DRBD' )
+  while IFS=$'\t' read -r st label detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
+  done <<< "$(_parse_drbd "$drbd_raw")"
+
+  out+=( 'Pacemaker' )
+  while IFS=$'\t' read -r st label detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
+  done <<< "$(_parse_pcs "$pcs_raw")"
+
+  out+=( "VIP ${vip}:${port}" )
+  if [[ "$http" == 2* || "$http" == 3* ]]; then out+=( "$(_row ok "$(printf '%-11s' HTTP)" "$http")" )
+  else out+=( "$(_row bad "$(printf '%-11s' HTTP)" "$http")" ); bad=$((bad+1)); fi
+
+  if (( bad == 0 )); then out+=( "$(_row ok '' 'healthy')" )
+  else out+=( "$(_row bad '' "$bad issue(s)")" ); fi
+
+  ui_box 'Cluster Health' "${out[@]}"
+  (( bad == 0 ))
 }
 
 cmd_logs() {

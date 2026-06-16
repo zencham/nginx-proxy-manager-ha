@@ -93,5 +93,16 @@ out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_pcs 
 check "pcs vip stopped bad" "bad	npm_vip" "$out"
 check "pcs failed actions bad" "bad	failed-actions" "$out"
 
+echo "== Task P3: status panel rendering =="
+esc="$(NO_COLOR=1 bash -c '
+  source ./npmctl >/dev/null 2>&1; set +e +o pipefail
+  ui_box "Cluster Health" "DRBD" "$(_row ok "  app " "Connected UpToDate/UpToDate")"
+' 2>/dev/null | tr -cd "\033" | wc -c | tr -d " ")"
+check "status panel NO_COLOR has no ESC" "0" "$esc"
+out="$(NO_COLOR=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _row ok "  app" "x"' 2>/dev/null)"
+check "row ok shows check" "✓" "$out"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _row bad "  db" "x"' 2>/dev/null)"
+check "row bad shows cross" "✗" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
