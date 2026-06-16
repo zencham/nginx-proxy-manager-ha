@@ -27,6 +27,32 @@ run() {
   "$@"
 }
 
+# run_step <label> <cmd...> : spinner while running on a TTY, then ✓/✗ + elapsed.
+# Honors dry-run (prints "would-run: <cmd>") and non-TTY (plain lines). Returns rc.
+run_step() {
+  local label="$1"; shift
+  if [[ "$DRY_RUN" == "1" ]]; then printf 'would-run: %s\n' "$*"; return 0; fi
+  local log rc start=$SECONDS; log="$(mktemp)"
+  if [[ -t 1 ]]; then
+    ( "$@" >"$log" 2>&1 ) & local pid=$! i=0
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    tput civis >/dev/tty 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r%s%s%s %s' "$C_CYN" "${frames:i++%10:1}" "$C_RESET" "$label" >/dev/tty
+      sleep 0.1
+    done
+    wait "$pid"; rc=$?
+    tput cnorm >/dev/tty 2>/dev/null || true
+    printf '\r\033[K' >/dev/tty
+  else
+    printf '• %s\n' "$label"; "$@" >"$log" 2>&1; rc=$?
+  fi
+  local secs=$(( SECONDS - start ))
+  if (( rc == 0 )); then printf '%s✓%s %s (%ss)\n' "$C_GREEN" "$C_RESET" "$label" "$secs"
+  else printf '%s✗%s %s (rc %s)\n' "$C_RED" "$C_RESET" "$label" "$rc"; tail -n 15 "$log"; fi
+  rm -f "$log"; return "$rc"
+}
+
 # --- command functions (filled in by later tasks) ---
 cmd_help() {
   cat <<'EOF'
@@ -50,12 +76,12 @@ Commands:
 EOF
 }
 
-cmd_drift()   { run ansible-playbook drift_check.yml "$@"; }
-cmd_backup()  { run ansible-playbook proxy_backup.yml "$@"; }
-cmd_verify()  { run ansible-playbook proxy_verify.yml "$@"; }
-cmd_restore() { run ansible-playbook proxy_restore.yml "$@"; }
-cmd_update()  { run ansible-playbook npm_update.yml "$@"; }
-cmd_cert()    { run ansible-playbook cert_manager.yml "$@"; }
+cmd_drift()   { run_step "drift check"          ansible-playbook drift_check.yml "$@"; }
+cmd_backup()  { run_step "snapshot proxy hosts" ansible-playbook proxy_backup.yml "$@"; }
+cmd_verify()  { run_step "verify proxy hosts"   ansible-playbook proxy_verify.yml "$@"; }
+cmd_restore() { run_step "restore proxy hosts"  ansible-playbook proxy_restore.yml "$@"; }
+cmd_update()  { run_step "rolling update"       ansible-playbook npm_update.yml "$@"; }
+cmd_cert()    { run_step "issue/renew certs"    ansible-playbook cert_manager.yml "$@"; }
 
 # confirm_or_die <message> : interactive yes/no. Honors --yes (FORCE_YES) and dry-run.
 FORCE_YES=0
@@ -73,20 +99,98 @@ confirm_or_die() {
   [[ "$ans" == "y" || "$ans" == "Y" ]] || die "aborted by operator"
 }
 
-cmd_main() { run ansible-playbook main.yml "$@"; }
+cmd_main() { run_step "converge (main.yml)" ansible-playbook main.yml "$@"; }
 
 # VIP/admin port: parsed from group_vars with documented fallbacks.
 _vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 _port() { sed -nE 's/^npm_admin_port:[[:space:]]*"?([0-9]+)"?.*/\1/p'   inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 
+# _parse_drbd <text> : emit "ok|bad<TAB>app|db<TAB>detail" per DRBD minor (10=app,11=db).
+_parse_drbd() {
+  local text="$1" line label st cs ds
+  while IFS= read -r line; do
+    case "$line" in
+      10:*) label=app ;;
+      11:*) label=db ;;
+      *) continue ;;
+    esac
+    if [[ "$line" == *cs:Connected* && "$line" == *ds:UpToDate/UpToDate* ]]; then st=ok; else st=bad; fi
+    cs="$(printf '%s\n' "$line" | grep -oE 'cs:[A-Za-z]+' | head -1)"
+    ds="$(printf '%s\n' "$line" | grep -oE 'ds:[A-Za-z]+/[A-Za-z]+' | head -1)"
+    printf '%s\t%s\t%s %s\n' "$st" "$label" "${cs#cs:}" "${ds#ds:}"
+  done <<< "$text"
+}
+
+# _parse_pcs <text> : emit "ok|bad<TAB>name<TAB>detail" for npm_vip / npm_service,
+# plus "bad<TAB>failed-actions<TAB>present" if Failed Resource Actions appear.
+_parse_pcs() {
+  local text="$1" line name st detail node
+  for name in npm_vip npm_service; do
+    line="$(printf '%s\n' "$text" | grep -F "$name" | head -1)"
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == *Started* ]]; then
+      node="$(printf '%s\n' "$line" | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+      st=ok; detail="Started ${node}"
+    else
+      detail="$(printf '%s\n' "$line" | grep -oE 'Stopped|FAILED|Starting' | head -1)"
+      st=bad; detail="${detail:-down}"
+    fi
+    printf '%s\t%s\t%s\n' "$st" "$name" "$detail"
+  done
+  if printf '%s\n' "$text" | grep -q 'Failed Resource Actions'; then
+    printf 'bad\tfailed-actions\tpresent\n'
+  fi
+}
+
+# _row <ok|bad|''> <label> <detail> : indented "✓ label  detail" / "✗ …" for a
+# check, or a plain group heading when status is empty. Color via palette.
+_row() {
+  local st="$1" label="$2" detail="$3"
+  case "$st" in
+    ok)  printf '  %s✓%s %s%s' "$C_GREEN" "$C_RESET" "$label" "${detail:+ $detail}" ;;
+    bad) printf '  %s✗%s %s%s' "$C_RED"   "$C_RESET" "$label" "${detail:+ $detail}" ;;
+    *)   printf '%s' "$label" ;;
+  esac
+}
+
 cmd_status() {
   local vip port; vip="$(_vip)"; vip="${vip:-192.168.206.220}"; port="$(_port)"; port="${port:-15625}"
-  info "DRBD:"
-  run ansible ha_nodes -b -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd'
-  info "Pacemaker:"
-  run ansible ha_nodes -b -m shell -a 'pcs status --full | grep -E "npm_service|npm_vip|Failed Resource" || true'
-  info "VIP ${vip}:${port}:"
-  run curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 8 "http://${vip}:${port}/"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    run ansible ha_nodes -b -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd'
+    return 0
+  fi
+  local drbd_raw pcs_raw http out=() bad=0 st label detail
+  # Tight per-resource signature (cs:WORD ro:W/W ds:W/W); keep one row per minor
+  # (app=10, db=11). awk '!seen[$1]++' takes the first occurrence across both nodes.
+  drbd_raw="$(ansible ha_nodes -b -o -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd' 2>/dev/null \
+              | grep -oE '1[01]: cs:[A-Za-z]+ ro:[A-Za-z]+/[A-Za-z]+ ds:[A-Za-z]+/[A-Za-z]+' \
+              | awk '!seen[$1]++')"
+  pcs_raw="$(ansible ha_nodes -b -o -m shell -a 'pcs status --full | grep -E "npm_service|npm_vip|Failed Resource"' 2>/dev/null)"
+  http="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://${vip}:${port}/" 2>/dev/null || echo 000)"
+
+  out+=( 'DRBD' )
+  while IFS=$'\t' read -r st label detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
+  done <<< "$(_parse_drbd "$drbd_raw")"
+
+  out+=( 'Pacemaker' )
+  while IFS=$'\t' read -r st label detail; do
+    [[ -z "$st" ]] && continue
+    [[ "$st" == bad ]] && bad=$((bad+1))
+    out+=( "$(_row "$st" "$(printf '%-11s' "$label")" "$detail")" )
+  done <<< "$(_parse_pcs "$pcs_raw")"
+
+  out+=( "VIP ${vip}:${port}" )
+  if [[ "$http" == 2* || "$http" == 3* ]]; then out+=( "$(_row ok "$(printf '%-11s' HTTP)" "$http")" )
+  else out+=( "$(_row bad "$(printf '%-11s' HTTP)" "$http")" ); bad=$((bad+1)); fi
+
+  if (( bad == 0 )); then out+=( "$(_row ok '' 'healthy')" )
+  else out+=( "$(_row bad '' "$bad issue(s)")" ); fi
+
+  ui_box 'Cluster Health' "${out[@]}"
+  (( bad == 0 ))
 }
 
 cmd_logs() {
@@ -161,30 +265,65 @@ _restore_term() {
 }
 trap _restore_term EXIT INT
 
-ui_banner() {
-  printf '%s╭─ NPM HA ─ MIBTECH ──────────────╮%s\n' "$C_CYN" "$C_RESET"
-  printf '%s│%s  npmctl — cluster management    %s│%s\n' "$C_CYN" "$C_RESET" "$C_CYN" "$C_RESET"
-  printf '%s╰─────────────────────────────────╯%s\n' "$C_CYN" "$C_RESET"
+# _vlen <text> : visible character width (strips ANSI; counts code points, correct
+# for non-wide glyphs in a UTF-8 locale) so colored/Unicode content aligns.
+_vlen() {
+  local esc s
+  esc="$(printf '\033')"
+  s="$(printf '%s' "$1" | sed "s/${esc}\[[0-9;]*m//g")"
+  printf '%s' "${#s}"
 }
 
-# ui_menu <prompt> <item1> <item2> ... : arrow-key + number select; echoes chosen item.
+# ui_box <title> <line>... : rounded box sized to the widest visible line.
+# NPMCTL_ASCII=1 falls back to ASCII corners for terminals without box glyphs.
+ui_box() {
+  local title="$1"; shift
+  local lines=("$@") w i len
+  w="$(_vlen "$title")"
+  for i in "${lines[@]}"; do len="$(_vlen "$i")"; (( len > w )) && w=$len; done
+  (( w += 2 ))
+  local tl='╭' tr='╮' bl='╰' br='╯' h='─' v='│'
+  if [[ -n "${NPMCTL_ASCII:-}" ]]; then tl='+'; tr='+'; bl='+'; br='+'; h='-'; v='|'; fi
+  local topfill bar pad n
+  topfill=''; for (( n = w - ${#title} - 3; n > 0; n-- )); do topfill+="$h"; done
+  bar='';     for (( n = w; n > 0; n-- )); do bar+="$h"; done
+  printf '%s%s%s %s %s%s%s\n' "$C_CYN" "$tl" "$h" "$title" "$topfill" "$tr" "$C_RESET"
+  for i in "${lines[@]}"; do
+    pad=$(( w - 2 - $(_vlen "$i") )); (( pad < 0 )) && pad=0
+    printf '%s%s%s %s%*s %s%s%s\n' "$C_CYN" "$v" "$C_RESET" "$i" "$pad" '' "$C_CYN" "$v" "$C_RESET"
+  done
+  printf '%s%s%s%s%s\n' "$C_CYN" "$bl" "$bar" "$br" "$C_RESET"
+}
+
+ui_banner() { ui_box 'NPM HA · MIBTECH' 'npmctl — cluster management'; }
+
 # ui_menu <prompt> <item1> ... : draws to /dev/tty and reads keys from /dev/tty so
-# the ONLY thing on stdout is the chosen item (safe under choice="$(ui_menu ...)").
+# the ONLY thing on stdout is the chosen item. Items beginning with "--" are
+# non-selectable section headings (skipped by arrow nav). An optional parallel
+# UI_DESC array (indexed like items) prints a dim description per row.
 ui_menu() {
   local prompt="$1"; shift
-  local items=("$@") sel=0 key i
+  local items=("$@") sel=0 key i it desc
+  # advance sel by direction d to the next selectable (non-"--") row; no-op at ends.
+  _sel_next() { local d="$1" n=$sel; while :; do n=$((n+d)); ((n<0||n>=${#items[@]})) && return 1; [[ "${items[$n]}" == --* ]] || { sel=$n; return 0; }; done; }
+  [[ "${items[0]}" == --* ]] && _sel_next 1
   tput civis >/dev/tty 2>/dev/null || true
   while true; do
     printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_RESET" >/dev/tty
     for i in "${!items[@]}"; do
-      if [[ "$i" == "$sel" ]]; then printf '  %s› %s%s\n' "$C_GREEN" "${items[$i]}" "$C_RESET" >/dev/tty
-      else printf '    %s\n' "${items[$i]}" >/dev/tty; fi
+      it="${items[$i]}"; desc="${UI_DESC[$i]:-}"
+      if [[ "$it" == --* ]]; then
+        printf '  %s%s%s\n' "$C_DIM" "${it#--}" "$C_RESET" >/dev/tty
+      elif [[ "$i" == "$sel" ]]; then
+        printf '  %s› %-11s%s %s%s%s\n' "$C_GREEN" "$it" "$C_RESET" "$C_DIM" "$desc" "$C_RESET" >/dev/tty
+      else
+        printf '    %-11s %s%s%s\n' "$it" "$C_DIM" "$desc" "$C_RESET" >/dev/tty
+      fi
     done
     IFS= read -rsn1 key </dev/tty
     if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.001 key </dev/tty || true
-      case "$key" in '[A') ((sel>0)) && ((sel--));; '[B') ((sel<${#items[@]}-1)) && ((sel++));; esac
-    elif [[ "$key" == "" ]]; then break
-    elif [[ "$key" =~ ^[0-9]$ ]] && (( key>=1 && key<=${#items[@]} )); then sel=$((key-1)); break
+      case "$key" in '[A') _sel_next -1 || true;; '[B') _sel_next 1 || true;; esac
+    elif [[ "$key" == "" ]]; then [[ "${items[$sel]}" == --* ]] || break
     fi
     printf '\e[%dA' "$(( ${#items[@]} + 1 ))" >/dev/tty
   done
@@ -193,17 +332,21 @@ ui_menu() {
 }
 
 interactive_menu() {
-  local choice
+  local choice t items UI_DESC
   while true; do
     clear 2>/dev/null || true
     ui_banner
-    choice="$(ui_menu 'Choose an action:' \
-      'deploy' 'drift' 'status' 'backup' 'verify' 'restore' \
-      'update' 'cert' 'logs' 'vault-edit' 'quit')"
+    items=( '--Operate' deploy drift '--Inspect' status logs
+            '--Maintain' backup verify restore update cert vault-edit quit )
+    UI_DESC=( '' 'safe converge (gate→backup→verify)' 'check repo vs live config'
+              '' 'cluster / DRBD / VIP health' 'tail NPM container logs'
+              '' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
+              'rolling image update' 'issue/renew TLS' 'edit secrets' 'exit' )
+    choice="$(ui_menu 'Choose an action:' "${items[@]}")"
     [[ "$choice" == "quit" ]] && break
     printf '\n'
     if [[ "$choice" == "vault-edit" ]]; then
-      local t; t="$(ui_menu 'Which vault?' 'ha_nodes' 'controller')"; dispatch vault-edit "$t" || true
+      UI_DESC=(); t="$(ui_menu 'Which vault?' 'ha_nodes' 'controller')"; dispatch vault-edit "$t" || true
     else
       dispatch "$choice" || warn "command '$choice' failed (rc $?)"
     fi
@@ -228,4 +371,8 @@ main() {
   fi
 }
 
-main "$@"
+# Run main only when executed directly; when sourced (tests access functions in
+# isolation) skip it so sourcing has no side effects.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
