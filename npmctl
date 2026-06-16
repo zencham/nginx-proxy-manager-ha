@@ -297,24 +297,33 @@ ui_box() {
 
 ui_banner() { ui_box 'NPM HA · MIBTECH' 'npmctl — cluster management'; }
 
-# ui_menu <prompt> <item1> <item2> ... : arrow-key + number select; echoes chosen item.
 # ui_menu <prompt> <item1> ... : draws to /dev/tty and reads keys from /dev/tty so
-# the ONLY thing on stdout is the chosen item (safe under choice="$(ui_menu ...)").
+# the ONLY thing on stdout is the chosen item. Items beginning with "--" are
+# non-selectable section headings (skipped by arrow nav). An optional parallel
+# UI_DESC array (indexed like items) prints a dim description per row.
 ui_menu() {
   local prompt="$1"; shift
-  local items=("$@") sel=0 key i
+  local items=("$@") sel=0 key i it desc
+  # advance sel by direction d to the next selectable (non-"--") row; no-op at ends.
+  _sel_next() { local d="$1" n=$sel; while :; do n=$((n+d)); ((n<0||n>=${#items[@]})) && return 1; [[ "${items[$n]}" == --* ]] || { sel=$n; return 0; }; done; }
+  [[ "${items[0]}" == --* ]] && _sel_next 1
   tput civis >/dev/tty 2>/dev/null || true
   while true; do
     printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_RESET" >/dev/tty
     for i in "${!items[@]}"; do
-      if [[ "$i" == "$sel" ]]; then printf '  %s› %s%s\n' "$C_GREEN" "${items[$i]}" "$C_RESET" >/dev/tty
-      else printf '    %s\n' "${items[$i]}" >/dev/tty; fi
+      it="${items[$i]}"; desc="${UI_DESC[$i]:-}"
+      if [[ "$it" == --* ]]; then
+        printf '  %s%s%s\n' "$C_DIM" "${it#--}" "$C_RESET" >/dev/tty
+      elif [[ "$i" == "$sel" ]]; then
+        printf '  %s› %-11s%s %s%s%s\n' "$C_GREEN" "$it" "$C_RESET" "$C_DIM" "$desc" "$C_RESET" >/dev/tty
+      else
+        printf '    %-11s %s%s%s\n' "$it" "$C_DIM" "$desc" "$C_RESET" >/dev/tty
+      fi
     done
     IFS= read -rsn1 key </dev/tty
     if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.001 key </dev/tty || true
-      case "$key" in '[A') ((sel>0)) && ((sel--));; '[B') ((sel<${#items[@]}-1)) && ((sel++));; esac
-    elif [[ "$key" == "" ]]; then break
-    elif [[ "$key" =~ ^[0-9]$ ]] && (( key>=1 && key<=${#items[@]} )); then sel=$((key-1)); break
+      case "$key" in '[A') _sel_next -1 || true;; '[B') _sel_next 1 || true;; esac
+    elif [[ "$key" == "" ]]; then [[ "${items[$sel]}" == --* ]] || break
     fi
     printf '\e[%dA' "$(( ${#items[@]} + 1 ))" >/dev/tty
   done
@@ -323,17 +332,21 @@ ui_menu() {
 }
 
 interactive_menu() {
-  local choice
+  local choice t items UI_DESC
   while true; do
     clear 2>/dev/null || true
     ui_banner
-    choice="$(ui_menu 'Choose an action:' \
-      'deploy' 'drift' 'status' 'backup' 'verify' 'restore' \
-      'update' 'cert' 'logs' 'vault-edit' 'quit')"
+    items=( '--Operate' deploy drift '--Inspect' status logs
+            '--Maintain' backup verify restore update cert vault-edit quit )
+    UI_DESC=( '' 'safe converge (gate→backup→verify)' 'check repo vs live config'
+              '' 'cluster / DRBD / VIP health' 'tail NPM container logs'
+              '' 'snapshot proxy hosts' 'verify proxy hosts' 'restore proxy hosts'
+              'rolling image update' 'issue/renew TLS' 'edit secrets' 'exit' )
+    choice="$(ui_menu 'Choose an action:' "${items[@]}")"
     [[ "$choice" == "quit" ]] && break
     printf '\n'
     if [[ "$choice" == "vault-edit" ]]; then
-      local t; t="$(ui_menu 'Which vault?' 'ha_nodes' 'controller')"; dispatch vault-edit "$t" || true
+      UI_DESC=(); t="$(ui_menu 'Which vault?' 'ha_nodes' 'controller')"; dispatch vault-edit "$t" || true
     else
       dispatch "$choice" || warn "command '$choice' failed (rc $?)"
     fi
