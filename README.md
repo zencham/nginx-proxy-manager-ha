@@ -194,6 +194,33 @@ acme_server: "letsencrypt_test"
 
 Issue against staging, verify the cert upload flow, then switch back to `letsencrypt` and re-run to issue the production cert.
 
+## Proxy Guard — safe re-converge of the live cluster
+
+`proxy_guard` snapshots the NPM reverse-proxy configuration so `main.yml` can be
+re-run against the already-deployed cluster to prove idempotency without risking
+the live proxy hosts.
+
+Procedure:
+
+```bash
+ansible-playbook proxy_backup.yml      # snapshot proxies -> backups/npm-latest.json
+ansible-playbook main.yml              # re-converge (DRBD/cluster/resource steps skip)
+ansible-playbook proxy_verify.yml      # assert nothing was lost
+```
+
+If verify reports missing hosts, restore them from the snapshot:
+
+```bash
+ansible-playbook proxy_verify.yml --tags restore
+```
+
+Snapshots are written to `backups/` (gitignored — they contain live domain
+config). `proxy_backup.yml` and `proxy_verify.yml` are GET-only and safe to run
+against production; `--tags restore` is the only path that writes to NPM.
+
+Set `proxy_guard_sample_domain` (role default) to a real domain to also probe a
+live site through the VIP during verify.
+
 ## Future Considerations
 
 - **Docker CE migration**: both nodes currently run `docker.io` (the Debian
