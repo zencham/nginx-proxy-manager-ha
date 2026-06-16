@@ -668,5 +668,5 @@ This sequence is the definition of done: it proves `main.yml` is idempotent on t
 ## Self-Review Notes
 
 - **Spec coverage:** snapshot scope (all 6 types) → Task 4; manual-confirm restore → Tasks 5 (verify fails loudly with command) + 6 (manual `--tags restore`); empty-snapshot guard → Task 4 Step 2; gitignored backups → Task 1; identity-by-domain fix → Task 3.
-- **Placeholder scan:** the only multi-variant block is Task 3 Step 4, where the experimental Jinja is explicitly marked dead-end and the implementer is directed to the final loop-based block. All other steps contain complete, runnable content.
+- **Placeholder scan:** every step contains complete, runnable content. `compute_missing.yml` (Task 3 Step 4) is a single authoritative builtin-only loop implementation — no variants or "use this instead" notes.
 - **Type consistency:** `proxy_guard_missing`, `_pg_snapshot_hosts`, `_pg_live_hosts`, `_pg_live_signatures` are named identically across compute_missing, verify, restore, and the test.
