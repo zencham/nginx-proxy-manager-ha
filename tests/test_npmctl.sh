@@ -71,5 +71,27 @@ else
   printf '  skip menu pty test (python3 not found)\n'
 fi
 
+echo "== Task P2: parsers =="
+drbd_ok="10: cs:Connected ro:Primary/Secondary ds:UpToDate/UpToDate C r-----
+11: cs:Connected ro:Secondary/Primary ds:UpToDate/UpToDate C r-----"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_drbd "$1"' _ "$drbd_ok" 2>/dev/null)"
+check "drbd healthy app ok" "ok	app" "$out"
+check "drbd healthy db ok"  "ok	db"  "$out"
+drbd_bad="10: cs:StandAlone ro:Primary/Unknown ds:UpToDate/DUnknown r-----
+11: cs:Connected ro:Secondary/Primary ds:Inconsistent/UpToDate C r-----"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_drbd "$1"' _ "$drbd_bad" 2>/dev/null)"
+check "drbd standalone bad" "bad	app" "$out"
+check "drbd inconsistent bad" "bad	db" "$out"
+pcs_ok="  * npm_vip	(ocf:heartbeat:IPaddr2):	 Started MIBTECH-NPM-PROD-01
+  * npm_service	(systemd:npm-stack):	 Started MIBTECH-NPM-PROD-01"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_pcs "$1"' _ "$pcs_ok" 2>/dev/null)"
+check "pcs vip started ok" "ok	npm_vip" "$out"
+check "pcs service started ok" "ok	npm_service" "$out"
+pcs_bad="  * npm_vip	(ocf:heartbeat:IPaddr2):	 Stopped
+Failed Resource Actions:"
+out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_pcs "$1"' _ "$pcs_bad" 2>/dev/null)"
+check "pcs vip stopped bad" "bad	npm_vip" "$out"
+check "pcs failed actions bad" "bad	failed-actions" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]

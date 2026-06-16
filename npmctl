@@ -79,6 +79,43 @@ cmd_main() { run ansible-playbook main.yml "$@"; }
 _vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 _port() { sed -nE 's/^npm_admin_port:[[:space:]]*"?([0-9]+)"?.*/\1/p'   inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
 
+# _parse_drbd <text> : emit "ok|bad<TAB>app|db<TAB>detail" per DRBD minor (10=app,11=db).
+_parse_drbd() {
+  local text="$1" line label st cs ds
+  while IFS= read -r line; do
+    case "$line" in
+      10:*) label=app ;;
+      11:*) label=db ;;
+      *) continue ;;
+    esac
+    if [[ "$line" == *cs:Connected* && "$line" == *ds:UpToDate/UpToDate* ]]; then st=ok; else st=bad; fi
+    cs="$(printf '%s\n' "$line" | grep -oE 'cs:[A-Za-z]+' | head -1)"
+    ds="$(printf '%s\n' "$line" | grep -oE 'ds:[A-Za-z]+/[A-Za-z]+' | head -1)"
+    printf '%s\t%s\t%s %s\n' "$st" "$label" "${cs#cs:}" "${ds#ds:}"
+  done <<< "$text"
+}
+
+# _parse_pcs <text> : emit "ok|bad<TAB>name<TAB>detail" for npm_vip / npm_service,
+# plus "bad<TAB>failed-actions<TAB>present" if Failed Resource Actions appear.
+_parse_pcs() {
+  local text="$1" line name st detail node
+  for name in npm_vip npm_service; do
+    line="$(printf '%s\n' "$text" | grep -F "$name" | head -1)"
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == *Started* ]]; then
+      node="$(printf '%s\n' "$line" | grep -oE 'MIBTECH-[A-Z0-9-]+' | head -1)"
+      st=ok; detail="Started ${node}"
+    else
+      detail="$(printf '%s\n' "$line" | grep -oE 'Stopped|FAILED|Starting' | head -1)"
+      st=bad; detail="${detail:-down}"
+    fi
+    printf '%s\t%s\t%s\n' "$st" "$name" "$detail"
+  done
+  if printf '%s\n' "$text" | grep -q 'Failed Resource Actions'; then
+    printf 'bad\tfailed-actions\tpresent\n'
+  fi
+}
+
 cmd_status() {
   local vip port; vip="$(_vip)"; vip="${vip:-192.168.206.220}"; port="$(_port)"; port="${port:-15625}"
   info "DRBD:"
