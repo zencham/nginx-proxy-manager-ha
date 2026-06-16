@@ -140,6 +140,25 @@ _parse_nodes() {
   done
 }
 
+# _maint_precheck <drbd-text> <nodes-text> <drain-full> : 0 if safe to drain.
+# Safe = peer is Online (not standby/offline) AND every DRBD disk state is
+# UpToDate/UpToDate (no Inconsistent/Diskless/Unknown anywhere).
+_maint_precheck() {
+  local drbd="$1" nodes="$2" drain="$3" peer n1 n2
+  n1="$(_node1)"; n2="$(_node2)"; n1="${n1:-MIBTECH-NPM-PROD-01}"; n2="${n2:-MIBTECH-NPM-PROD-02}"
+  if [[ "$drain" == "$n1" ]]; then peer="$n2"; else peer="$n1"; fi
+  if ! printf '%s\n' "$nodes" | grep -E '^ *Online:' | grep -qF "$peer"; then
+    warn "maintenance precheck: peer $peer is not Online"; return 1
+  fi
+  if printf '%s\n' "$nodes" | grep -E '^ *(Standby|Offline):' | grep -qF "$peer"; then
+    warn "maintenance precheck: peer $peer is in standby/offline"; return 1
+  fi
+  if printf '%s\n' "$drbd" | grep -oE 'ds:[A-Za-z]+/[A-Za-z]+' | grep -qvE 'ds:UpToDate/UpToDate'; then
+    warn "maintenance precheck: DRBD not UpToDate on both nodes"; return 1
+  fi
+  return 0
+}
+
 # _parse_drbd <text> : emit "ok|bad<TAB>app|db<TAB>detail" per DRBD minor (10=app,11=db).
 _parse_drbd() {
   local text="$1" line label st cs ds

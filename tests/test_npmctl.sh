@@ -133,5 +133,23 @@ out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _parse_node
 check "parse_nodes standby row" "STANDBY" "$out"
 check "parse_nodes standby is bad" "bad	" "$out"
 
+echo "== Task M3: maint precheck =="
+drbd_ok2="MIBTECH-NPM-PROD-01 | rc=0 | 10: cs:Connected ds:UpToDate/UpToDate
+11: cs:Connected ds:UpToDate/UpToDate
+MIBTECH-NPM-PROD-02 | rc=0 | 10: cs:Connected ds:UpToDate/UpToDate
+11: cs:Connected ds:UpToDate/UpToDate"
+nodes_ok="Online: MIBTECH-NPM-PROD-01 MIBTECH-NPM-PROD-02
+ Standby:"
+bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _maint_precheck "$1" "$2" "$3"' _ "$drbd_ok2" "$nodes_ok" "MIBTECH-NPM-PROD-01" >/dev/null 2>&1
+check_rc "precheck ok when healthy" 0 "$?"
+drbd_bad2="MIBTECH-NPM-PROD-01 | 10: cs:Connected ds:Inconsistent/UpToDate
+11: cs:Connected ds:UpToDate/UpToDate"
+bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _maint_precheck "$1" "$2" "$3"' _ "$drbd_bad2" "$nodes_ok" "MIBTECH-NPM-PROD-01" >/dev/null 2>&1
+check_rc "precheck fails on inconsistent drbd" 1 "$?"
+nodes_peer_sb="Online: MIBTECH-NPM-PROD-01
+ Standby: MIBTECH-NPM-PROD-02"
+bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _maint_precheck "$1" "$2" "$3"' _ "$drbd_ok2" "$nodes_peer_sb" "MIBTECH-NPM-PROD-01" >/dev/null 2>&1
+check_rc "precheck fails when peer already standby" 1 "$?"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
