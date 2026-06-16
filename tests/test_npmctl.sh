@@ -24,5 +24,13 @@ check "help lists status" "status" "$out"
 NPMCTL_DRY_RUN=1 $NPMCTL bogus >/dev/null 2>&1; check_rc "unknown command exits non-zero" 2 "$?"
 out="$(NPMCTL_DRY_RUN=1 $NPMCTL bogus 2>&1)"; check "unknown command shows usage" "Usage" "$out"
 
+echo "== Task 2: playbook wrappers =="
+for pair in "drift:drift_check.yml" "backup:proxy_backup.yml" "verify:proxy_verify.yml" \
+            "restore:proxy_restore.yml" "update:npm_update.yml" "cert:cert_manager.yml"; do
+  c="${pair%%:*}"; pb="${pair##*:}"
+  out="$(NPMCTL_DRY_RUN=1 $NPMCTL "$c" 2>&1)"
+  check "$c runs $pb" "would-run: ansible-playbook $pb" "$out"
+done
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]

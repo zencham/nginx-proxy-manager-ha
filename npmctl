@@ -42,11 +42,24 @@ Commands:
 EOF
 }
 
+cmd_drift()   { run ansible-playbook drift_check.yml "$@"; }
+cmd_backup()  { run ansible-playbook proxy_backup.yml "$@"; }
+cmd_verify()  { run ansible-playbook proxy_verify.yml "$@"; }
+cmd_restore() { run ansible-playbook proxy_restore.yml "$@"; }
+cmd_update()  { run ansible-playbook npm_update.yml "$@"; }
+cmd_cert()    { run ansible-playbook cert_manager.yml "$@"; }
+
 # --- dispatch ---
 dispatch() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
     help|-h|--help) cmd_help ;;
+    drift)   cmd_drift "$@" ;;
+    backup)  cmd_backup "$@" ;;
+    verify)  cmd_verify "$@" ;;
+    restore) cmd_restore "$@" ;;
+    update)  cmd_update "$@" ;;
+    cert)    cmd_cert "$@" ;;
     *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
   esac
 }
