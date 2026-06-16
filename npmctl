@@ -27,6 +27,32 @@ run() {
   "$@"
 }
 
+# run_step <label> <cmd...> : spinner while running on a TTY, then ✓/✗ + elapsed.
+# Honors dry-run (prints "would-run: <cmd>") and non-TTY (plain lines). Returns rc.
+run_step() {
+  local label="$1"; shift
+  if [[ "$DRY_RUN" == "1" ]]; then printf 'would-run: %s\n' "$*"; return 0; fi
+  local log rc start=$SECONDS; log="$(mktemp)"
+  if [[ -t 1 ]]; then
+    ( "$@" >"$log" 2>&1 ) & local pid=$! i=0
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    tput civis >/dev/tty 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r%s%s%s %s' "$C_CYN" "${frames:i++%10:1}" "$C_RESET" "$label" >/dev/tty
+      sleep 0.1
+    done
+    wait "$pid"; rc=$?
+    tput cnorm >/dev/tty 2>/dev/null || true
+    printf '\r\033[K' >/dev/tty
+  else
+    printf '• %s\n' "$label"; "$@" >"$log" 2>&1; rc=$?
+  fi
+  local secs=$(( SECONDS - start ))
+  if (( rc == 0 )); then printf '%s✓%s %s (%ss)\n' "$C_GREEN" "$C_RESET" "$label" "$secs"
+  else printf '%s✗%s %s (rc %s)\n' "$C_RED" "$C_RESET" "$label" "$rc"; tail -n 15 "$log"; fi
+  rm -f "$log"; return "$rc"
+}
+
 # --- command functions (filled in by later tasks) ---
 cmd_help() {
   cat <<'EOF'
@@ -50,12 +76,12 @@ Commands:
 EOF
 }
 
-cmd_drift()   { run ansible-playbook drift_check.yml "$@"; }
-cmd_backup()  { run ansible-playbook proxy_backup.yml "$@"; }
-cmd_verify()  { run ansible-playbook proxy_verify.yml "$@"; }
-cmd_restore() { run ansible-playbook proxy_restore.yml "$@"; }
-cmd_update()  { run ansible-playbook npm_update.yml "$@"; }
-cmd_cert()    { run ansible-playbook cert_manager.yml "$@"; }
+cmd_drift()   { run_step "drift check"          ansible-playbook drift_check.yml "$@"; }
+cmd_backup()  { run_step "snapshot proxy hosts" ansible-playbook proxy_backup.yml "$@"; }
+cmd_verify()  { run_step "verify proxy hosts"   ansible-playbook proxy_verify.yml "$@"; }
+cmd_restore() { run_step "restore proxy hosts"  ansible-playbook proxy_restore.yml "$@"; }
+cmd_update()  { run_step "rolling update"       ansible-playbook npm_update.yml "$@"; }
+cmd_cert()    { run_step "issue/renew certs"    ansible-playbook cert_manager.yml "$@"; }
 
 # confirm_or_die <message> : interactive yes/no. Honors --yes (FORCE_YES) and dry-run.
 FORCE_YES=0
@@ -73,7 +99,7 @@ confirm_or_die() {
   [[ "$ans" == "y" || "$ans" == "Y" ]] || die "aborted by operator"
 }
 
-cmd_main() { run ansible-playbook main.yml "$@"; }
+cmd_main() { run_step "converge (main.yml)" ansible-playbook main.yml "$@"; }
 
 # VIP/admin port: parsed from group_vars with documented fallbacks.
 _vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }

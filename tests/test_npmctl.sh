@@ -104,5 +104,9 @@ check "row ok shows check" "✓" "$out"
 out="$(bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; _row bad "  db" "x"' 2>/dev/null)"
 check "row bad shows cross" "✗" "$out"
 
+echo "== Task P4: run_step =="
+out="$(NPMCTL_DRY_RUN=1 bash -c 'source ./npmctl >/dev/null 2>&1; set +e +o pipefail; run_step lbl ansible-playbook foo.yml' 2>/dev/null)"
+check "run_step dry-run prints would-run" "would-run: ansible-playbook foo.yml" "$out"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
