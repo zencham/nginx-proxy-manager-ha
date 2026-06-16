@@ -67,6 +67,34 @@ confirm_or_die() {
 
 cmd_main() { run ansible-playbook main.yml "$@"; }
 
+# VIP/admin port: parsed from group_vars with documented fallbacks.
+_vip() {  sed -nE 's/^vip_address:[[:space:]]*"?([0-9.]+)"?.*/\1/p' inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+_port() { sed -nE 's/^npm_admin_port:[[:space:]]*"?([0-9]+)"?.*/\1/p'   inventory/group_vars/ha_nodes/vars.yml 2>/dev/null | head -1; }
+
+cmd_status() {
+  local vip port; vip="$(_vip)"; vip="${vip:-192.168.206.220}"; port="$(_port)"; port="${port:-15625}"
+  info "DRBD:"
+  run ansible ha_nodes -b -m shell -a 'grep -E "^ *[0-9]+:" /proc/drbd'
+  info "Pacemaker:"
+  run ansible ha_nodes -b -m shell -a 'pcs status --full | grep -E "npm_service|npm_vip|Failed Resource" || true'
+  info "VIP ${vip}:${port}:"
+  run curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 8 "http://${vip}:${port}/"
+}
+
+cmd_logs() {
+  local n="${1:-50}"
+  run ansible ha_nodes -b -m shell -a "docker compose -f /opt/npm/compose/docker-compose.yml logs --tail=${n} 2>/dev/null || true"
+}
+
+cmd_vault_edit() {
+  local target="${1:-}"
+  case "$target" in
+    ha_nodes)   run ansible-vault edit inventory/group_vars/ha_nodes/vault.yml ;;
+    controller) run ansible-vault edit inventory/group_vars/controller/vault.yml ;;
+    *) die "vault-edit: target must be ha_nodes or controller" ;;
+  esac
+}
+
 cmd_deploy() {
   local force=0
   FORCE_YES=0
@@ -109,6 +137,9 @@ dispatch() {
     update)  cmd_update "$@" ;;
     cert)    cmd_cert "$@" ;;
     deploy)  cmd_deploy "$@" ;;
+    status)     cmd_status "$@" ;;
+    logs)       cmd_logs "$@" ;;
+    vault-edit) cmd_vault_edit "$@" ;;
     *) printf 'Usage: npmctl <command>\nUnknown command: %s\n' "$cmd" >&2; cmd_help >&2; return 2 ;;
   esac
 }

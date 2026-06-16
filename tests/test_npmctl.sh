@@ -46,5 +46,14 @@ check "deploy --force notes bypass" "drift gate bypassed" "$out"
 out="$(NPMCTL_DRY_RUN=1 $NPMCTL deploy --yes 2>&1)"
 check "deploy --yes skips confirm" "confirm-skipped" "$out"
 
+echo "== Task 4: live commands =="
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL status 2>&1)"
+check "status probes drbd"  "would-run: ansible ha_nodes" "$out"
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL logs 2>&1)"
+check "logs uses docker compose logs" "compose" "$out"
+out="$(NPMCTL_DRY_RUN=1 $NPMCTL vault-edit ha_nodes 2>&1)"
+check "vault-edit edits ha_nodes vault" "would-run: ansible-vault edit inventory/group_vars/ha_nodes/vault.yml" "$out"
+NPMCTL_DRY_RUN=1 $NPMCTL vault-edit bogus >/dev/null 2>&1; check_rc "vault-edit rejects bad target" 1 "$?"
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]
