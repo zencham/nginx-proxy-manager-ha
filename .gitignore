@@ -6,3 +6,6 @@
 
 # NPM proxy-config snapshots — live data, not source
 backups/
+
+# Local Ansible collection/role cache (installed via requirements.yml)
+.ansible/
