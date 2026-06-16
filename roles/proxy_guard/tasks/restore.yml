@@ -1,1 +1,47 @@
 ---
+- name: Load latest snapshot
+  ansible.builtin.set_fact:
+    _pg_snapshot: "{{ lookup('file', proxy_guard_backup_dir + '/npm-latest.json') | from_json }}"
+
+- name: Fetch current live proxy hosts
+  ansible.builtin.uri:
+    url: "{{ npm_api_base_url }}/api/nginx/proxy-hosts"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    status_code: 200
+  register: _pg_live
+
+- name: Set inputs for compute_missing
+  ansible.builtin.set_fact:
+    _pg_snapshot_hosts: "{{ _pg_snapshot['proxy-hosts'] }}"
+    _pg_live_hosts: "{{ _pg_live.json }}"
+
+- name: Compute missing proxy hosts
+  ansible.builtin.include_tasks: compute_missing.yml
+
+- name: Report restore scope
+  ansible.builtin.debug:
+    msg: "Restoring {{ proxy_guard_missing | length }} missing proxy host(s)"
+
+- name: Re-create each missing proxy host
+  ansible.builtin.uri:
+    url: "{{ npm_api_base_url }}/api/nginx/proxy-hosts"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ npm_token }}"
+    body_format: json
+    body: >-
+      {{ host | dict2items
+         | rejectattr('key', 'in', ['id', 'created_on', 'modified_on', 'owner_user_id'])
+         | list | items2dict }}
+    status_code: 201
+  loop: "{{ proxy_guard_missing }}"
+  loop_control:
+    loop_var: host
+    label: "{{ host.domain_names | join(', ') }}"
+  register: _pg_restored
+
+- name: Report restore result
+  ansible.builtin.debug:
+    msg: "Restored {{ _pg_restored.results | default([]) | length }} proxy host(s). Re-run verify to confirm."
