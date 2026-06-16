@@ -1,0 +1,50 @@
+---
+# Offline unit test for roles/proxy_guard/tasks/compute_missing.yml.
+# Run: ansible-playbook tests/test_compute_missing.yml
+- name: Test compute_missing logic
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _snapshot: "{{ lookup('file', 'fixtures/snapshot_sample.json') | from_json }}"
+  tasks:
+    # Case 1: one host deleted (id 22 gone), one disabled (id 31 enabled=0).
+    # Expect both 22 and 31 reported missing; 14 present.
+    - name: Arrange live state with a deletion and a disable
+      ansible.builtin.set_fact:
+        _pg_snapshot_hosts: "{{ _snapshot['proxy-hosts'] }}"
+        _pg_live_hosts:
+          - {id: 14, domain_names: ["app.mibtech.ma"], enabled: 1}
+          - {id: 99, domain_names: ["api.myakdital.ma", "api2.myakdital.ma"], enabled: 0}
+
+    - name: Run logic under test
+      ansible.builtin.include_tasks: ../roles/proxy_guard/tasks/compute_missing.yml
+
+    - name: Collect missing domain sets for assertion
+      ansible.builtin.set_fact:
+        _missing_domains: "{{ proxy_guard_missing | map(attribute='domain_names') | map('sort') | list }}"
+
+    - name: Assert deleted and disabled hosts are reported missing, present host is not
+      ansible.builtin.assert:
+        that:
+          - proxy_guard_missing | length == 2
+          - "['portal.visionhis.ma'] in _missing_domains"
+          - "['api.myakdital.ma', 'api2.myakdital.ma'] in _missing_domains"
+          - "['app.mibtech.ma'] not in _missing_domains"
+        fail_msg: "compute_missing produced wrong set: {{ proxy_guard_missing }}"
+        success_msg: "compute_missing OK"
+
+    # Case 2: live fully matches snapshot -> nothing missing.
+    - name: Arrange live state identical to snapshot
+      ansible.builtin.set_fact:
+        _pg_live_hosts: "{{ _snapshot['proxy-hosts'] }}"
+
+    - name: Run logic under test (happy path)
+      ansible.builtin.include_tasks: ../roles/proxy_guard/tasks/compute_missing.yml
+
+    - name: Assert nothing missing when live matches snapshot
+      ansible.builtin.assert:
+        that:
+          - proxy_guard_missing | length == 0
+        fail_msg: "Expected no missing hosts, got: {{ proxy_guard_missing }}"
+        success_msg: "compute_missing happy-path OK"
