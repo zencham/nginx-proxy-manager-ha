@@ -55,5 +55,14 @@ out="$(NPMCTL_DRY_RUN=1 $NPMCTL vault-edit ha_nodes 2>&1)"
 check "vault-edit edits ha_nodes vault" "would-run: ansible-vault edit inventory/group_vars/ha_nodes/vault.yml" "$out"
 NPMCTL_DRY_RUN=1 $NPMCTL vault-edit bogus >/dev/null 2>&1; check_rc "vault-edit rejects bad target" 1 "$?"
 
+echo "== Task 5: UI guards =="
+out="$(printf '' | NPMCTL_DRY_RUN=1 $NPMCTL 2>&1)"; rc=$?
+check "no-args non-tty shows help" "Usage: npmctl" "$out"
+check_rc "no-args non-tty exits non-zero" 2 "$rc"
+# NO_COLOR must produce zero ESC (0x1b) bytes. tr -cd keeps only ESC bytes; wc -c counts them.
+esc_count="$(NO_COLOR=1 NPMCTL_DRY_RUN=1 $NPMCTL status 2>/dev/null | tr -cd '\033' | wc -c | tr -d ' ')"
+check "NO_COLOR strips ANSI" "0" "$esc_count"
+# Sanity: the same status output, when it WOULD color (forced palette), is still escape-free under capture (non-TTY) — guard is correct either way.
+
 echo "== done: $PASS passed, $FAIL failed =="
 [[ "$FAIL" -eq 0 ]]

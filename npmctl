@@ -5,6 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN="${NPMCTL_DRY_RUN:-0}"
 
+# ANSI palette — disabled when not a TTY or NO_COLOR is set.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  C_RESET=$'\e[0m'; C_BOLD=$'\e[1m'; C_DIM=$'\e[2m'
+  C_RED=$'\e[31m'; C_GREEN=$'\e[32m'; C_YEL=$'\e[33m'; C_BLU=$'\e[34m'; C_CYN=$'\e[36m'
+else
+  C_RESET=''; C_BOLD=''; C_DIM=''; C_RED=''; C_GREEN=''; C_YEL=''; C_BLU=''; C_CYN=''
+fi
+
 # --- output helpers ---
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -144,10 +152,78 @@ dispatch() {
   esac
 }
 
+# Restore cursor/colors on exit or Ctrl-C, but only on a real TTY — otherwise
+# tput would emit escape bytes into piped/captured output (e.g. `npmctl status | grep`).
+_restore_term() {
+  [[ -t 1 ]] || return 0
+  tput cnorm 2>/dev/null || true
+  printf '%s' "${C_RESET:-}"
+}
+trap _restore_term EXIT INT
+
+ui_banner() {
+  printf '%s╭─ NPM HA ─ MIBTECH ──────────────╮%s\n' "$C_CYN" "$C_RESET"
+  printf '%s│%s  npmctl — cluster management    %s│%s\n' "$C_CYN" "$C_RESET" "$C_CYN" "$C_RESET"
+  printf '%s╰─────────────────────────────────╯%s\n' "$C_CYN" "$C_RESET"
+}
+
+# ui_menu <prompt> <item1> <item2> ... : arrow-key + number select; echoes chosen item.
+ui_menu() {
+  local prompt="$1"; shift
+  local items=("$@") sel=0 key i
+  tput civis 2>/dev/null || true
+  while true; do
+    printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_RESET"
+    for i in "${!items[@]}"; do
+      if [[ "$i" == "$sel" ]]; then printf '  %s› %s%s\n' "$C_GREEN" "${items[$i]}" "$C_RESET"
+      else printf '    %s\n' "${items[$i]}"; fi
+    done
+    IFS= read -rsn1 key
+    if [[ "$key" == $'\e' ]]; then read -rsn2 -t 0.001 key || true
+      case "$key" in '[A') ((sel>0)) && ((sel--));; '[B') ((sel<${#items[@]}-1)) && ((sel++));; esac
+    elif [[ "$key" == "" ]]; then break
+    elif [[ "$key" =~ ^[0-9]$ ]] && (( key>=1 && key<=${#items[@]} )); then sel=$((key-1)); break
+    fi
+    printf '\e[%dA' "$(( ${#items[@]} + 1 ))"
+  done
+  tput cnorm 2>/dev/null || true
+  printf '%s' "${items[$sel]}"
+}
+
+interactive_menu() {
+  local choice
+  while true; do
+    clear 2>/dev/null || true
+    ui_banner
+    choice="$(ui_menu 'Choose an action:' \
+      'deploy' 'drift' 'status' 'backup' 'verify' 'restore' \
+      'update' 'cert' 'logs' 'vault-edit' 'quit')"
+    [[ "$choice" == "quit" ]] && break
+    printf '\n'
+    if [[ "$choice" == "vault-edit" ]]; then
+      local t; t="$(ui_menu 'Which vault?' 'ha_nodes' 'controller')"; dispatch vault-edit "$t" || true
+    else
+      dispatch "$choice" || warn "command '$choice' failed (rc $?)"
+    fi
+    printf '\n%sPress Enter to return to the menu…%s' "$C_DIM" "$C_RESET"; read -r
+  done
+}
+
 main() {
   cd "$SCRIPT_DIR"
   [[ -f ansible.cfg ]] || die "must be run from the project root (ansible.cfg not found)"
-  dispatch "$@"
+  [[ -f .vault_pass ]] || warn ".vault_pass not found — vault-backed commands will fail until you create it"
+  if [[ $# -eq 0 ]]; then
+    if [[ -t 0 && -t 1 ]]; then
+      interactive_menu
+    else
+      printf 'Usage: npmctl <command>  (interactive menu needs a TTY)\n' >&2
+      cmd_help >&2
+      return 2
+    fi
+  else
+    dispatch "$@"
+  fi
 }
 
 main "$@"
